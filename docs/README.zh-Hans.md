@@ -1,6 +1,6 @@
 
 
-[English](../README.md) · **简体中文** · [繁體中文](README.zh-Hant.md)
+  **简体中文** · [繁體中文](README.zh-Hant.md)
 
 ## 功能特性
 
