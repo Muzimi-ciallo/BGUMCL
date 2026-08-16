@@ -1,0 +1,79 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "BGUMCL",
+  "version": "1.2.1",
+  "identifier": "BGUMCL",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**",
+          "**/.*/**",
+          "**/.*/**/.*/**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "rpm",
+      "nsis",
+      "app"
+    ],
+    "category": "Game",
+    "copyright": "Copyright © 2024-2026 BGUMCL Team",
+    "icon": [
+      "assets/icons/32x32.png",
+      "assets/icons/64x64.png",
+      "assets/icons/128x128.png",
+      "assets/icons/128x128@2x.png",
+      "assets/icons/icon.icns",
+      "assets/icons/icon.ico",
+      "assets/icons/icon.png"
+    ],
+    "licenseFile": "../LICENSE",
+    "license": "GPLv3",
+    "fileAssociations": [
+      {
+        "ext": [
+          "mrpack"
+        ],
+        "name": "Modrinth Modpack",
+        "description": "Modrinth Modpack File",
+        "role": "Editor",
+        "mimeType": "application/zip",
+        "rank": "Default"
+      }
+    ],
+    "resources": {
+      "assets/skins/*": "assets/skins/",
+      "assets/game/*": "assets/game/",
+      "assets/icons/icon.ico": "assets/icons/icon.ico",
+      "assets/icons/icon.png": "assets/icons/icon.png",
+      "assets/icons/variants/square.png": "assets/icons/variants/square.png",
+      "assets/db/*": "assets/db/"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "bgumcl"
+        ]
+      }
+    },
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  }
+}

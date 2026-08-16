@@ -1,0 +1,684 @@
+import {
+  Avatar,
+  AvatarBadge,
+  Box,
+  Center,
+  Flex,
+  HStack,
+  Highlight,
+  Icon,
+  IconButton,
+  Image,
+  Input,
+  Tag,
+  Text,
+  VStack,
+  useDisclosure,
+} from "@chakra-ui/react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  LuChevronRight,
+  LuCircleCheck,
+  LuCircleMinus,
+  LuClockArrowUp,
+  LuSearch,
+  LuSquareLibrary,
+  LuTriangleAlert,
+  LuX,
+} from "react-icons/lu";
+import { BeatLoader } from "react-spinners";
+import { CommonIconButton } from "@/components/common/common-icon-button";
+import CountTag from "@/components/common/count-tag";
+import Empty from "@/components/common/empty";
+import { OptionItem, OptionItemGroup } from "@/components/common/option-item";
+import { Section } from "@/components/common/section";
+import { WrapCardGroup } from "@/components/common/wrap-card";
+import {
+  modLoaderTypes,
+  modLoaderTypesToIcon,
+} from "@/components/loader-selector";
+import { ChangeLoaderModal } from "@/components/modals/change-loader-modal";
+import CheckModUpdateModal from "@/components/modals/check-mod-update-modal";
+import ModInfoModal from "@/components/modals/mod-info-modal";
+import { useFileDnD } from "@/components/special/file-dnd-overlay";
+import { useLauncherConfig } from "@/contexts/config";
+import { useExtensionHost } from "@/contexts/extension/host";
+import { useInstanceSharedData } from "@/contexts/instance";
+import { useSharedModals } from "@/contexts/shared-modal";
+import { useToast } from "@/contexts/toast";
+import { ExtensionUISlotKey } from "@/enums/extension";
+import { InstanceSubdirType, ModLoaderType } from "@/enums/instance";
+import { OtherResourceType } from "@/enums/resource";
+import { InstanceError } from "@/enums/service-error";
+import { GetStateFlag } from "@/hooks/get-state";
+import { LocalModInfo } from "@/models/instance/misc";
+import { InstanceService } from "@/services/instance";
+import { ResourceService } from "@/services/resource";
+import { UtilsService } from "@/services/utils";
+import { parseModLoaderVersion } from "@/utils/instance";
+import { base64ImgSrc } from "@/utils/string";
+
+const InstanceModsPage = () => {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const {
+    instanceId,
+    summary,
+    openInstanceSubdir,
+    handleImportResources,
+    getLocalModList,
+    isLocalModListLoading: isLoading,
+  } = useInstanceSharedData();
+  const { getExtensionSlotItems } = useExtensionHost();
+  const { config, update } = useLauncherConfig();
+  const { openSharedModal, openGenericConfirmDialog } = useSharedModals();
+  const primaryColor = config.appearance.theme.primaryColor;
+  const accordionStates = config.states.instanceModsPage.accordionStates;
+  const showZhTrans =
+    config.general.general.language === "zh-Hans" &&
+    config.general.functionality.resourceTranslation;
+  const currentModLoaderType =
+    summary?.modLoader?.loaderType ?? ModLoaderType.Unknown;
+  const currentModLoaderVersion = summary?.modLoader?.version || "";
+
+  const [localMods, setLocalMods] = useState<LocalModInfo[]>([]);
+  const [filteredMods, setFilteredMods] = useState<LocalModInfo[]>([]);
+  const [query, setQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [targetLoaderType, setTargetLoaderType] = useState<ModLoaderType>(
+    ModLoaderType.Unknown
+  );
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [modInfoSelectedMod, setModInfoSelectedMod] =
+    useState<LocalModInfo | null>(null);
+
+  const {
+    isOpen: isChangeLoaderModalOpen,
+    onOpen: onChangeLoaderModalOpen,
+    onClose: onChangeLoaderModalClose,
+  } = useDisclosure();
+
+  const {
+    isOpen: isCheckUpdateModalOpen,
+    onOpen: onCheckUpdateModalOpen,
+    onClose: onCheckUpdateModalClose,
+  } = useDisclosure();
+
+  const {
+    isOpen: isModInfoModalOpen,
+    onOpen: onModInfoModalOpen,
+    onClose: onModInfoModalClose,
+  } = useDisclosure();
+
+  const handleTypeSelect = async (type: ModLoaderType) => {
+    if (!summary?.id) return;
+
+    const response = await InstanceService.checkChangeModLoaderAvailablity(
+      summary.id
+    );
+
+    if (response.status === "success") {
+      if (response.data) {
+        setTargetLoaderType(type);
+        onChangeLoaderModalOpen();
+      } else {
+        toast({
+          title: t("Services.instance.changeModLoader.error.title"),
+          status: "error",
+        });
+      }
+    } else {
+      toast({
+        title: response.message,
+        description: response.details,
+        status: "error",
+      });
+    }
+  };
+
+  const getLocalModListWrapper = useCallback(
+    (sync?: boolean) => {
+      getLocalModList(sync).then((data) => {
+        if (data === GetStateFlag.Cancelled) {
+          // this means the user has cancelled the operation.
+          return;
+        }
+        setLocalMods(data || []);
+      });
+    },
+    [getLocalModList]
+  );
+
+  useEffect(() => {
+    getLocalModListWrapper();
+  }, [getLocalModListWrapper]);
+
+  useEffect(() => {
+    const unlisten = ResourceService.onResourceRefresh(
+      (payload: OtherResourceType) => {
+        if (payload === OtherResourceType.Mod) {
+          getLocalModListWrapper(true);
+        }
+      }
+    );
+    return unlisten;
+  }, [getLocalModListWrapper]);
+
+  useEffect(() => {
+    const keywords = query.trim().toLowerCase().split(/\s+/);
+    if (keywords.length === 0 || keywords[0] === "") {
+      setFilteredMods(localMods);
+    } else {
+      const filtered = localMods.filter((mod) => {
+        const name = mod.name?.toLowerCase() || "";
+        const fileName = mod.fileName?.toLowerCase() || "";
+        const translatedName = mod.translatedName?.toLowerCase() || "";
+        return keywords.some(
+          (kw) =>
+            name.includes(kw) ||
+            fileName.includes(kw) ||
+            translatedName.includes(kw)
+        );
+      });
+
+      setFilteredMods(filtered);
+    }
+  }, [query, localMods]);
+
+  useEffect(() => {
+    if (isSearching) searchInputRef.current?.focus();
+  }, [isSearching]);
+
+  useFileDnD({
+    extensions: ["jar", "disabled"],
+    multiple: true,
+    titleKey: "InstanceModsPage.fileDnD.title",
+    descKey: "InstanceModsPage.fileDnD.desc",
+    icon: LuSquareLibrary,
+    onDrop: async (paths) => {
+      handleImportResources({
+        filterName: t("InstanceDetailsLayout.instanceTabList.mods"),
+        filterExt: ["jar", "disabled"],
+        tgtDirType: InstanceSubdirType.Mods,
+        paths,
+        multiple: true,
+        onSuccessCallback: () => {
+          getLocalModListWrapper(true);
+        },
+      });
+    },
+  });
+
+  const handleClearSearch = () => {
+    setQuery("");
+    setIsSearching(false);
+  };
+
+  const handleToggleModByExtension = useCallback(
+    (filePath: string, enable: boolean) => {
+      InstanceService.toggleModByExtension(filePath, enable).then(
+        (response) => {
+          if (response.status === "success") {
+            setLocalMods((prevMods) =>
+              prevMods.map((prev) => {
+                if (prev.filePath === filePath) {
+                  let newFilePath = prev.filePath;
+                  if (enable && newFilePath.endsWith(".disabled")) {
+                    newFilePath = newFilePath.slice(0, -9);
+                  }
+                  if (!enable && !newFilePath.endsWith(".disabled")) {
+                    newFilePath = newFilePath + ".disabled";
+                  }
+
+                  return {
+                    ...prev,
+                    filePath: newFilePath,
+                    enabled: enable,
+                  };
+                }
+                return prev;
+              })
+            );
+          } else {
+            toast({
+              title: response.message,
+              description: response.details,
+              status: "error",
+            });
+            if (response.raw_error === InstanceError.FileNotFoundError) {
+              getLocalModListWrapper(true);
+            }
+          }
+        }
+      );
+    },
+    [toast, getLocalModListWrapper]
+  );
+
+  const handleDeleteSingleMod = useCallback(
+    (mod: LocalModInfo) => {
+      openGenericConfirmDialog({
+        title: t("DeleteModAlertDialog.dialog.title"),
+        body: t("DeleteModAlertDialog.dialog.content", {
+          instanceName: summary?.name ?? "",
+          modName: mod.name || mod.fileName,
+        }),
+        btnOK: t("General.delete"),
+        isAlert: true,
+        showSuppressBtn: true,
+        suppressKey: "deleteModAlert",
+        onOKCallback: () => {
+          UtilsService.deleteFile(mod.filePath)
+            .then((response) => {
+              if (response.status === "success") {
+                setLocalMods((prev) =>
+                  prev.filter((m) => m.filePath !== mod.filePath)
+                );
+                toast({
+                  title: response.message,
+                  status: "success",
+                });
+              } else {
+                toast({
+                  title: response.message,
+                  description: response.details,
+                  status: "error",
+                });
+              }
+            })
+            .finally(() => {
+              getLocalModListWrapper(true);
+            });
+        },
+      });
+    },
+    [openGenericConfirmDialog, t, toast, getLocalModListWrapper, summary?.name]
+  );
+
+  const modSecMenuOperations = [
+    {
+      icon: "openFolder",
+      onClick: () => {
+        openInstanceSubdir(InstanceSubdirType.Mods);
+      },
+    },
+    {
+      icon: "download",
+      onClick: () => {
+        openSharedModal("download-resource", {
+          initialResourceType: OtherResourceType.Mod,
+        });
+      },
+    },
+    {
+      icon: LuClockArrowUp,
+      label: t("InstanceModsPage.modList.menu.update"),
+      onClick: onCheckUpdateModalOpen,
+      disable: isLoading || localMods.length === 0,
+    },
+    {
+      icon: "add",
+      onClick: () => {
+        handleImportResources({
+          filterName: t("InstanceDetailsLayout.instanceTabList.mods"),
+          filterExt: ["zip", "jar", "disabled"],
+          tgtDirType: InstanceSubdirType.Mods,
+          multiple: true,
+          onSuccessCallback: () => {
+            getLocalModListWrapper(true);
+          },
+        });
+      },
+    },
+    {
+      icon: "refresh",
+      onClick: () => {
+        getLocalModListWrapper(true);
+      },
+    },
+  ];
+
+  const modItemMenuOperations = (mod: LocalModInfo) => [
+    ...getExtensionSlotItems(ExtensionUISlotKey.InstanceModItemMenuOperations, {
+      mod,
+      instanceId,
+      summary,
+    }),
+    ...(mod.potentialIncompatibility
+      ? [
+          {
+            label: t("InstanceModsPage.modList.menu.alert"),
+            icon: LuTriangleAlert,
+            danger: true,
+            onClick: () => {},
+          },
+        ]
+      : []),
+    {
+      label: t(mod.enabled ? "General.disable" : "General.enable"),
+      icon: mod.enabled ? LuCircleMinus : LuCircleCheck,
+      danger: false,
+      onClick: () => {
+        handleToggleModByExtension(mod.filePath, !mod.enabled);
+      },
+    },
+    {
+      label: "",
+      icon: "revealFile", // use common-icon-button predefined icon
+      danger: false,
+      onClick: () => {
+        revealItemInDir(mod.filePath);
+      },
+    },
+    {
+      label: t("InstanceModsPage.modList.menu.info"),
+      icon: "info",
+      danger: false,
+      onClick: () => {
+        setModInfoSelectedMod(mod);
+        onModInfoModalOpen();
+      },
+    },
+    {
+      label: "",
+      icon: "delete",
+      danger: true,
+      onClick: () => {
+        handleDeleteSingleMod(mod);
+      },
+    },
+  ];
+
+  return (
+    <>
+      <Section
+        title={t("InstanceModsPage.modLoaderList.title")}
+        isAccordion
+        initialIsOpen={accordionStates[0]}
+        headExtra={
+          <Box
+            display="flex"
+            alignItems="center"
+            opacity={accordionStates[0] ? 0 : 1}
+            transition="opacity 0.2s ease"
+            mr={1}
+          >
+            {currentModLoaderType === ModLoaderType.Unknown ? (
+              <Text fontSize="xs" className="secondary-text">
+                {t("InstanceModsPage.modLoaderList.notInstalled")}
+              </Text>
+            ) : (
+              <HStack spacing={1.5}>
+                <Image
+                  src={`/images/icons/${modLoaderTypesToIcon[currentModLoaderType]}`}
+                  alt={currentModLoaderType}
+                  boxSize="16px"
+                  borderRadius="4px"
+                />
+                <Text fontSize="xs" className="secondary-text">
+                  {`${t("InstanceModsPage.modLoaderList.installed")} ${currentModLoaderType} ${parseModLoaderVersion(currentModLoaderVersion)}`}
+                </Text>
+              </HStack>
+            )}
+          </Box>
+        }
+        onAccordionToggle={(isOpen) => {
+          update(
+            "states.instanceModsPage.accordionStates",
+            accordionStates.toSpliced(0, 1, isOpen)
+          );
+        }}
+      >
+        <WrapCardGroup
+          items={modLoaderTypes.map((type) => ({
+            cardContent: (
+              <Flex justify="space-between" align="center">
+                <HStack spacing={2}>
+                  <Image
+                    src={`/images/icons/${modLoaderTypesToIcon[type]}`}
+                    alt={type}
+                    boxSize="28px"
+                    borderRadius="4px"
+                  />
+                  <VStack spacing={0} alignItems="start">
+                    <Text
+                      fontSize="xs-sm"
+                      fontWeight={
+                        currentModLoaderType === type ? "bold" : "normal"
+                      }
+                      color={
+                        currentModLoaderType === type
+                          ? `${config.appearance.theme.primaryColor}.600`
+                          : "inherit"
+                      }
+                    >
+                      {type}
+                    </Text>
+                    <Text fontSize="xs" className="secondary-text">
+                      {currentModLoaderType === type
+                        ? parseModLoaderVersion(currentModLoaderVersion)
+                        : t("InstanceModsPage.modLoaderList.notInstalled")}
+                    </Text>
+                  </VStack>
+                </HStack>
+                <HStack spacing={0}>
+                  <IconButton
+                    aria-label="select"
+                    icon={<Icon as={LuChevronRight} boxSize={3.5} />}
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => handleTypeSelect(type)}
+                  />
+                </HStack>
+              </Flex>
+            ),
+            isSelected: currentModLoaderType === type,
+          }))}
+        />
+      </Section>
+      <Section
+        title={t("InstanceModsPage.modList.title")}
+        isAccordion
+        initialIsOpen={accordionStates[1]}
+        titleExtra={
+          !isLoading && (
+            <CountTag
+              count={`${query.trim() ? `${filteredMods.length} / ` : ""}${localMods.length}`}
+            />
+          )
+        }
+        onAccordionToggle={(isOpen) => {
+          update(
+            "states.instanceModsPage.accordionStates",
+            accordionStates.toSpliced(1, 1, isOpen)
+          );
+        }}
+        headExtra={
+          <HStack spacing={2}>
+            {modSecMenuOperations.map((btn, index) => (
+              <CommonIconButton
+                key={index}
+                icon={btn.icon}
+                label={btn.label}
+                onClick={btn.onClick}
+                size="xs"
+                fontSize="sm"
+                h={21}
+                isDisabled={btn.disable}
+              />
+            ))}
+
+            {isSearching ? (
+              <HStack>
+                <Input
+                  ref={searchInputRef}
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                  }}
+                  size="xs"
+                  w={140}
+                  fontSize="sm"
+                  placeholder={t("InstanceModsPage.modList.menu.placeholder")}
+                  focusBorderColor={`${primaryColor}.500`}
+                />
+                <CommonIconButton
+                  icon={LuX}
+                  onClick={handleClearSearch}
+                  size="xs"
+                  fontSize="sm"
+                  label={t("General.cancel")}
+                />
+              </HStack>
+            ) : (
+              <CommonIconButton
+                icon={LuSearch}
+                onClick={() => setIsSearching(true)}
+                size="xs"
+                fontSize="sm"
+                label={t("InstanceModsPage.modList.menu.search")}
+              />
+            )}
+          </HStack>
+        }
+      >
+        {currentModLoaderType === ModLoaderType.Unknown &&
+          filteredMods.length > 0 && (
+            <HStack fontSize="xs" color="red.600" mt={-0.5} ml={1.5} mb={2}>
+              <Icon as={LuTriangleAlert} />
+              <Text>{t("InstanceModsPage.modList.warning")}</Text>
+            </HStack>
+          )}
+        {isLoading ? (
+          <Center mt={8}>
+            <BeatLoader size={16} color="gray" />
+          </Center>
+        ) : filteredMods.length > 0 ? (
+          <OptionItemGroup
+            items={filteredMods.map((mod) => (
+              <OptionItem
+                key={mod.fileName} // unique
+                childrenOnHover
+                title={
+                  <Text
+                    fontSize="xs-sm"
+                    overflow="hidden"
+                    className="ellipsis-text"
+                  >
+                    <Highlight
+                      query={query.trim().toLowerCase().split(/\s+/)}
+                      styles={{ bg: "yello.200" }}
+                    >
+                      {showZhTrans && mod.translatedName
+                        ? `${mod.translatedName} | ${mod.name}`
+                        : mod.name || mod.fileName}
+                    </Highlight>
+                  </Text>
+                }
+                titleExtra={
+                  <HStack flex="0 0 auto">
+                    {mod.version && (
+                      <Text fontSize="xs" className="secondary-text">
+                        {mod.version}
+                      </Text>
+                    )}
+                    {mod.loaderType !== ModLoaderType.Unknown && (
+                      <Tag colorScheme={primaryColor} className="tag-xs">
+                        {mod.loaderType}
+                      </Tag>
+                    )}
+                  </HStack>
+                }
+                description={
+                  <Text
+                    fontSize="xs"
+                    overflow="hidden"
+                    className="secondary-text ellipsis-text" // only show one line
+                  >
+                    <Highlight
+                      query={query.trim().toLowerCase().split(/\s+/)}
+                      styles={{ bg: "yellow.200" }}
+                    >
+                      {mod.fileName}
+                    </Highlight>
+                    {showZhTrans && mod.translatedDescription
+                      ? `: ${mod.translatedDescription}`
+                      : mod.description
+                        ? `: ${mod.description}`
+                        : ""}
+                  </Text>
+                }
+                prefixElement={
+                  <Avatar
+                    src={base64ImgSrc(mod.iconSrc)}
+                    name={mod.name || mod.fileName}
+                    boxSize="28px"
+                    borderRadius="4px"
+                    style={{
+                      filter: mod.enabled ? "none" : "grayscale(90%)",
+                      opacity: mod.enabled ? 1 : 0.5,
+                    }}
+                  >
+                    <AvatarBadge
+                      bg={
+                        mod.enabled
+                          ? mod.potentialIncompatibility
+                            ? "orange"
+                            : "green"
+                          : "black" // black with 0.5 opacity looks like gray.
+                      }
+                      boxSize="0.75em"
+                      borderWidth={2}
+                    />
+                  </Avatar>
+                }
+                titleLineWrap={false}
+              >
+                <HStack spacing={0}>
+                  {modItemMenuOperations(mod).map((item, index) => (
+                    <CommonIconButton
+                      key={index}
+                      icon={item.icon}
+                      label={item.label}
+                      colorScheme={item.danger ? "red" : "gray"}
+                      onClick={item.onClick}
+                    />
+                  ))}
+                </HStack>
+              </OptionItem>
+            ))}
+          />
+        ) : (
+          <Empty withIcon={false} size="sm" />
+        )}
+      </Section>
+      <CheckModUpdateModal
+        isOpen={isCheckUpdateModalOpen}
+        onClose={onCheckUpdateModalClose}
+        summary={summary}
+        localMods={localMods}
+      />
+
+      <ChangeLoaderModal
+        isOpen={isChangeLoaderModalOpen}
+        onClose={onChangeLoaderModalClose}
+        defaultSelectedType={targetLoaderType}
+      />
+
+      {modInfoSelectedMod && (
+        <ModInfoModal
+          isOpen={isModInfoModalOpen}
+          onClose={onModInfoModalClose}
+          mod={modInfoSelectedMod}
+          curInstanceMajorVersion={summary?.majorVersion}
+          curInstanceVersion={summary?.version}
+        />
+      )}
+    </>
+  );
+};
+
+export default InstanceModsPage;
