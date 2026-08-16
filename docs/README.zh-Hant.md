@@ -1,0 +1,195 @@
+<img src="figs/banner.png" alt="BGUMCL" />
+
+[![Test Build](https://img.shields.io/github/actions/workflow/status/UNIkeEN/BGUMCL/test.yml?label=test%20build&logo=github&style=for-the-badge)](https://github.com/UNIkeEN/BGUMCL/blob/main/.github/workflows/test.yml)
+![Downloads](https://img.shields.io/github/downloads/UNIkeEN/BGUMCL/total?logo=github&style=for-the-badge)
+![Stars](https://img.shields.io/github/stars/UNIkeEN/BGUMCL?style=for-the-badge)
+![Runs](https://img.shields.io/badge/dynamic/json?color=blue&style=for-the-badge&label=runs&query=$.total_count_str&url=https%3A%2F%2Fmc.sjtu.cn%2Fapi-sjmcl%2Fcount)
+[![Deepwiki](https://img.shields.io/badge/Ask-DeepWiki-20B2AA?logo=&style=for-the-badge)](https://deepwiki.com/UNIkeEN/BGUMCL)
+
+[English](../README.md) · [简体中文](README.zh-Hans.md) · **繁體中文**
+
+## 功能特性
+
+* **跨平臺支援**：相容 Windows 10/11、macOS 與 Linux。
+* **高效的實例管理**：支援多個遊戲目錄與實例，集中管理所有實例資源（如存檔、模組、資源包、光影包、截圖等）與設定。
+* **便捷的資源下載**：支援從 CurseForge 與 Modrinth 等源下載遊戲用戶端、模組載入器、各類遊戲資源與模組包。
+* **多帳戶系統支援**：內建 Microsoft 登入與第三方認證伺服器支援，相容 Yggdrasil Connect 的 OAuth 登入流程規範提案。
+* **外部服務協同**：透過深度連結與 MCP 服務，與外部網頁、程式及 Agent 服務協同運作，提供一系列便捷功能與自動化能力。
+* **開放擴展系統**：支援開發擴展，為啟動器擴展更多有趣且實用的功能。[>> 查看社區擴展](https://github.com/SJMC-Dev/awesome-BGUMCL-extensions/blob/main/README.zh-Hant.md)
+
+> 注意：部分功能可能受地區、執行平臺或程式發行類型限制。
+
+### 技術堆疊
+
+[![Tauri](https://img.shields.io/badge/Tauri-v2-FFC131?style=for-the-badge&logo=tauri&logoColor=white&labelColor=24C8DB)](https://tauri.app/)
+[![Next JS](https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![Chakra UI](https://img.shields.io/badge/chakra_ui-v2-38B2AC?style=for-the-badge&logo=chakraui&logoColor=white&labelColor=319795)](https://v2.chakra-ui.com/)
+
+## 開始使用
+
+開始使用 BGUMCL，只需前往 [官網](https://mc.sjtu.cn/sjmcl/downloads) 下載最新版即可。
+
+您也可以在 [GitHub Releases](https://github.com/UNIkeEN/BGUMCL/releases) 獲取所有版本，包括週期性構建。
+
+BGUMCL 目前支援以下平臺：
+
+| 平臺    | 系統版本            | 架構               | 提供的發行類型                              |
+|---------|---------------------|--------------------|--------------------------------------------|
+| Windows | 10 及以上         | `aarch64`, `i686`, `x86_64`   | 安裝版 `.exe`，便攜版 `.exe` |
+| macOS   | 10.15 及以上        | `aarch64`, `x86_64`| `.app`，`.dmg`                   |
+| Linux   | webkit2gtk 4.1 (如 Ubuntu 22.04) | `aarch64`, `x86_64` | `.deb`, `.rpm`, 便攜版二進位制檔案 |
+
+了解更多功能與常見問題，請參閱 [使用者文件](https://mc.sjtu.cn/sjmcl/docs)。
+
+<details>
+<summary><h3>從命令列安裝</h3></summary>
+
+<details>
+<summary><h4>Linux</h4></summary>
+
+使用 Linux 一鍵安裝腳本安裝最新正式版：
+
+```bash
+curl -LsSf https://mc.sjtu.cn/sjmcl/releases/install.sh | sh -s -- --source sjmc
+```
+
+不使用 root 權限安裝 Linux 便攜版：
+
+```bash
+curl -LsSf https://mc.sjtu.cn/sjmcl/releases/install.sh | sh -s -- --portable --source sjmc
+```
+
+透過常見的 [AUR 助手](https://wiki.archlinux.org/title/AUR_helpers) 從 Arch Linux 使用者套件庫（AUR）安裝：
+
+```bash
+yay -S sjmcl-bin
+```
+
+若不使用 AUR 助手，您也可以手動安裝：
+
+```bash
+git clone https://aur.archlinux.org/sjmcl-bin.git
+cd sjmcl-bin
+makepkg -si
+```
+
+透過 Snap Store 安裝：
+
+```bash
+sudo snap install sjmcl
+```
+
+> [!WARNING]
+> 使用 Snap 安裝時，遊戲資料可能會預設存放在沙盒目錄內。解除安裝啟動器前，請及時備份存檔、資源包、模組等重要資料。
+
+</details>
+
+<details>
+<summary><h4>macOS</h4></summary>
+
+透過 Homebrew 安裝：
+
+```bash
+brew install --cask SJMC-Dev/BGUMCL/sjmcl
+```
+
+</details>
+
+<details>
+<summary><h4>Windows</h4></summary>
+
+透過 Winget 安裝：
+
+```powershell
+winget install SJMC.BGUMCL
+```
+
+> [!WARNING]
+> Winget 的索引倉庫是公開協作維護的。安裝前建議執行 `winget show SJMC.BGUMCL` 檢視安裝器位址，並確認下載來源來自 `github.com/UNIkeEN/BGUMCL` 或 `sjmcl.club`。
+
+</details>
+
+更多安裝方式與平臺注意事項，請參閱 [使用者文件](https://mc.sjtu.cn/sjmcl/docs/install)。
+
+</details>
+
+## 開發與貢獻
+
+首先複製（clone）本專案並安裝前端依賴：
+
+```bash
+git clone git@github.com:UNIkeEN/BGUMCL.git
+pnpm install
+```
+
+使用開發模式執行：
+
+```bash
+pnpm tauri dev
+```
+
+我們熱烈歡迎每一位開發者的貢獻。
+
+* 在開始前，請先閱讀我們的 [貢獻指南](https://github.com/UNIkeEN/BGUMCL/blob/main/CONTRIBUTING.md)（內含開發流程詳細說明）。
+* API 參考與部分開發者筆記見 [開發者文件](https://mc.sjtu.cn/sjmcl/dev)。
+* 歡迎透過 [Pull Request](https://github.com/UNIkeEN/BGUMCL/pulls) 或 [GitHub Issues](https://github.com/UNIkeEN/BGUMCL/issues) 分享您的想法。
+
+### 開發擴展
+
+如果您希望為 BGUMCL 開發擴展，歡迎查看 [擴展文件](https://mc.sjtu.cn/sjmcl/dev/extension/)。內含擴展系統的介紹、API 參考。我們還提供了腳手架，便於快速建立範本專案並上手。
+
+### 貢獻者
+
+![貢獻者](https://contrib.rocks/image?repo=UNIkeEN/BGUMCL "貢獻者")
+
+## 版權宣告
+
+版權所有 © 2024-2026 BGUMCL 團隊。
+
+> 本軟體並非官方 Minecraft 服務。未獲得 Mojang 或 Microsoft 批准或關聯許可。
+
+本專案基於 [GNU 通用公眾授權條款 v3.0](../LICENSE) 釋出。
+
+依據 GPLv3 第 7 條款，當您分發本軟體的修改版本時，除遵守 GPLv3 外，還須遵守以下 [附加條款](../LICENSE.EXTRA)：
+
+1. 必須更換軟體名稱，禁止使用 BGUMCL 或 SJMC Launcher；
+2. 在您的專案 README、分發網站或相關文件、軟體的關於頁面中，須明確標註您的程式基於 BGUMCL，並註明原專案連結。
+3. 當對本軟體的修改僅限於**增加**（而非修改或刪除）預置認證伺服器（`src-tauri/src/account/helpers/authlib_injector/constants.rs`）時，前述第 1 條之限制不適用。在此情形下，您得繼續使用原始軟體名稱進行編譯與分發。
+
+另根據我們網站的使用者協議，當您分發本軟體的修改版本時，請僅向我們的資訊統計伺服器（`src-tauri/src/utils/sys_info.rs`）傳送帶字首（不少於兩個字母，如 `XX-0.0.1`）的版本號，除非您的修改滿足上述第 3 條限制。
+
+## 聯絡我們
+
+BGUMCL 使用者 QQ 交流群：860851380
+
+您還可以傳送郵件至 [launcher@sjmc.club](mailto:launcher@sjmc.club) 來聯絡我們。
+
+## 社群合作伙伴
+
+衷心感謝以下組織對 BGUMCL 專案開發與社群的支援。
+
+[
+  <picture>
+    <source srcset="figs/partners/sjmc-dark.png" media="(prefers-color-scheme: dark)">
+    <source srcset="figs/partners/sjmc.png" media="(prefers-color-scheme: light)">
+    <img src="figs/partners/sjmc.png" alt="SJMC" style="height: 65px;">
+  </picture>
+](https://mc.sjtu.cn)
+&nbsp;&nbsp;
+[<img src="figs/partners/sues-mc.png" alt="SUES-MC" style="height: 65px;"/>](https://www.suesmc.ltd/)
+
+[
+  <picture>
+    <source srcset="figs/partners/mua-dark.png" media="(prefers-color-scheme: dark)">
+    <source srcset="figs/partners/mua.png" media="(prefers-color-scheme: light)">
+    <img src="figs/partners/mua.png" alt="MUA" style="height: 45px;">
+  </picture>
+](https://www.mualliance.cn)
+&nbsp;&nbsp;&nbsp;&nbsp;
+[
+  <picture>
+    <source srcset="figs/partners/gnwork-dark.png" media="(prefers-color-scheme: dark)">
+    <source srcset="figs/partners/gnwork.png" media="(prefers-color-scheme: light)">
+    <img src="figs/partners/gnwork.png" alt="GNWORK" style="height: 45px;">
+  </picture>
+](https://space.bilibili.com/403097853)

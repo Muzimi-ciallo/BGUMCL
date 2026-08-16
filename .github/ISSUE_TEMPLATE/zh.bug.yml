@@ -1,0 +1,73 @@
+name: 错误报告
+description: 提交错误报告以帮助我们改进
+title: "[Bug] "
+labels: 📝 BUG Report
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您抽出时间报告问题！
+        在提交错误报告之前，请确保：
+          * 您已验证此问题与 BGUMCL 本身有关，而不是由 Minecraft 或已安装的模组导致
+          * 您已搜索过[现有问题](https://github.com/UNIkeEN/BGUMCL/issues)并确认该问题此前未被报告
+
+        请为您的问题提供一个简洁、清晰的标题。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: "请简要描述这个 bug 的具体表现。"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      description: "请输入您使用的操作系统（最好包含版本号）。"
+      placeholder: "例如：Windows 11 23H2 / macOS Sequoia 15.2 / Ubuntu 24.04.1"
+    validations:
+      required: true
+  
+  - type: input
+    id: launcherVersion
+    attributes:
+      label: BGUMCL 版本（可选）
+      description: "请输入您使用的 BGUMCL 版本。"
+      placeholder: "0.0.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: "请详细说明复现该 bug 的方法。"
+      placeholder: "请提供简洁的复现步骤。"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      description: "请简要描述预期的正确行为。"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 环境信息（可选）
+      description: "请提供您的启动器设置（`sjmcl.conf.json`的文件内容）或开发环境信息（完整的`tauri info`输出），这将有助于我们更好地解决问题。"
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息（可选）
+      description: "在此添加关于该问题的任何其他信息，例如截图、您认为可能导致此问题的原因等。"
+    validations:
+      required: false
