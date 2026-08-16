@@ -1,4 +1,4 @@
-<img src="figs/banner.png" alt="BGUMCL" />
+
 
 [![Test Build](https://img.shields.io/github/actions/workflow/status/UNIkeEN/BGUMCL/test.yml?label=test%20build&logo=github&style=for-the-badge)](https://github.com/UNIkeEN/BGUMCL/blob/main/.github/workflows/test.yml)
 ![Downloads](https://img.shields.io/github/downloads/UNIkeEN/BGUMCL/total?logo=github&style=for-the-badge)
