@@ -18,6 +18,6 @@
 
 
 
-非常感谢SJMC的开源项目与启发！！！
+非常感谢SJMC的开源项目与启发！！！https://github.com/SJMC-Dev/awesome-SJMCL-extensions.git
 
 
