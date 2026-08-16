@@ -1,11 +1,5 @@
 
 
-[![Test Build](https://img.shields.io/github/actions/workflow/status/UNIkeEN/BGUMCL/test.yml?label=test%20build&logo=github&style=for-the-badge)](https://github.com/UNIkeEN/BGUMCL/blob/main/.github/workflows/test.yml)
-![Downloads](https://img.shields.io/github/downloads/UNIkeEN/BGUMCL/total?logo=github&style=for-the-badge)
-![Stars](https://img.shields.io/github/stars/UNIkeEN/BGUMCL?style=for-the-badge)
-![Runs](https://img.shields.io/badge/dynamic/json?color=blue&style=for-the-badge&label=runs&query=$.total_count_str&url=https%3A%2F%2Fmc.sjtu.cn%2Fapi-sjmcl%2Fcount)
-[![Deepwiki](https://img.shields.io/badge/Ask-DeepWiki-20B2AA?logo=&style=for-the-badge)](https://deepwiki.com/UNIkeEN/BGUMCL)
-
 [English](../README.md) · **简体中文** · [繁體中文](README.zh-Hant.md)
 
 ## 功能特性
