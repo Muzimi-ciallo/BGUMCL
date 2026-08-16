@@ -1,4 +1,4 @@
-<img src="docs/figs/banner.png" alt="BGUMCL" />
+
 
 > BGUMCL is based on [SJMCL](https://github.com/UNIkeEN/SJMCL). This fork adds GitHub-based incremental modpack updates.
 
