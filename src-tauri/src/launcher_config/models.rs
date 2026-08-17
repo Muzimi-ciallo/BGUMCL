@@ -19,6 +19,7 @@ use crate::{APP_DATA_DIR, EXE_DIR, IS_PORTABLE};
 pub struct VersionMetaInfo {
   pub version: String,
   pub file_name: String,
+  pub download_url: Option<String>,
   pub release_notes: String,
   pub published_at: String,
 }
@@ -452,3 +453,4 @@ pub enum LauncherConfigError {
 }
 
 impl std::error::Error for LauncherConfigError {}
+

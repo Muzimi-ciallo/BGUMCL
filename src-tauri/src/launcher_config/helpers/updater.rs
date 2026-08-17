@@ -13,17 +13,8 @@ use crate::tasks::PTaskParam;
 use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 
-type SourceTuple = (&'static str, &'static str, fn(&str, &str) -> String);
-const SOURCES: [SourceTuple; 1] = [(
-  "https://api.github.com/repos/Muzimi-ciallo/BGUMCL/releases/latest",
-  "tag_name",
-  |ver, fname| {
-    format!(
-      "https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v{}/{}",
-      ver, fname
-    )
-  },
-)];
+const MANIFEST_URL: &str = "https://cdn.jsdelivr.net/gh/Muzimi-ciallo/BGUMCL@main/update.json";
+const DOWNLOAD_BASE_URL: &str = "https://github.com/Muzimi-ciallo/BGUMCL/releases/download";
 
 // Generate the new version filename on remote origin according to the current os, arch and is_portable
 fn build_resource_filename(ver: &str, os: &str, arch: &str, is_portable: bool) -> String {
@@ -60,9 +51,9 @@ fn build_local_new_filename(old_name: &str, old_version: &str, new_version: &str
 
 pub async fn fetch_latest_version(
   app: &AppHandle,
-) -> BGUMCLResult<Option<(String, String, String, String)>> {
+) -> BGUMCLResult<Option<(String, String, String, String, String)>> {
   let config_binding = app.state::<Mutex<LauncherConfig>>();
-  let (os, arch, is_portable, is_china_mainland_ip) = {
+  let (os, arch, is_portable, _is_china_mainland_ip) = {
     let config_state = config_binding.lock()?;
     (
       config_state.basic_info.os_type.clone(),
@@ -73,87 +64,75 @@ pub async fn fetch_latest_version(
   };
   let client = app.state::<reqwest::Client>();
 
-  let mut sources = SOURCES;
-  // If not in China (mainland), firstly try GitHub.
-  if !is_china_mainland_ip {
-    sources.reverse();
-  }
+  let resp = client
+    .get(MANIFEST_URL)
+    .send()
+    .await
+    .map_err(|_| LauncherConfigError::FetchError)?;
+  let j: Value = resp
+    .json()
+    .await
+    .map_err(|_| LauncherConfigError::FetchError)?;
 
-  for (endpoint, field, _) in sources {
-    if let Ok(resp) = client.get(endpoint).send().await
-      && let Ok(j) = resp.json::<Value>().await
-      && let Some(mut ver) = j.get(field).and_then(|v| v.as_str()).map(|s| s.to_string())
-    {
-      if ver.starts_with('v') {
-        ver.remove(0);
-      }
-      let fname = build_resource_filename(&ver, os.as_str(), arch.as_str(), is_portable);
+  let Some(ver) = j.get("version").and_then(|v| v.as_str()) else {
+    return Err(LauncherConfigError::FetchError.into());
+  };
+  let ver = ver.to_string();
+  let base_url = j
+    .get("base_url")
+    .and_then(|v| v.as_str())
+    .unwrap_or(DOWNLOAD_BASE_URL)
+    .trim_end_matches('/')
+    .to_string();
+  let fname = build_resource_filename(&ver, os.as_str(), arch.as_str(), is_portable);
+  let download_url = format!("{}/{}", base_url, fname);
 
-      let release_notes = j
-        .get("body")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-      let published_at = j
-        .get("published_at")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
+  let release_notes = j
+    .get("release_notes")
+    .and_then(|v| v.as_str())
+    .unwrap_or_default()
+    .to_string();
+  let published_at = j
+    .get("published_at")
+    .and_then(|v| v.as_str())
+    .unwrap_or_default()
+    .to_string();
 
-      return Ok(Some((ver, fname, release_notes, published_at)));
-    }
-  }
-
-  Err(LauncherConfigError::FetchError.into())
+  Ok(Some((ver, fname, download_url, release_notes, published_at)))
 }
 
 pub async fn download_target_version(
   app: &AppHandle,
   version: String,
   fname: String,
+  download_url: Option<String>,
 ) -> BGUMCLResult<()> {
   let config_binding = app.state::<Mutex<LauncherConfig>>();
-  let (download_cache_dir, is_china_mainland_ip) = {
+  let download_cache_dir = {
     let config_state = config_binding.lock()?;
-    (
-      config_state.download.cache.directory.clone(),
-      config_state.basic_info.is_china_mainland_ip,
-    )
+    config_state.download.cache.directory.clone()
   };
 
-  let client = app.state::<reqwest::Client>();
+  let url = match download_url {
+    Some(u) => u,
+    None => format!("{}/v{}/{}", DOWNLOAD_BASE_URL, version, fname),
+  };
 
-  let mut sources = SOURCES;
-  if !is_china_mainland_ip {
-    sources.reverse();
-  }
+  schedule_progressive_task_group(
+    app.clone(),
+    format!("launcher-update?{}", fname),
+    vec![PTaskParam::Download(DownloadParam {
+      src: url::Url::parse(&url).map_err(|_| LauncherConfigError::FetchError)?,
+      dest: download_cache_dir.join(&fname),
+      filename: Some(fname),
+      sha1: None,
+    })],
+    true,
+  )
+  .await?;
 
-  for (endpoint, _, mk_url) in sources {
-    if let Ok(resp) = client.get(endpoint).send().await
-      && resp.status().is_success()
-    {
-      let url = mk_url(&version, &fname);
-
-      schedule_progressive_task_group(
-        app.clone(),
-        format!("launcher-update?{}", fname),
-        vec![PTaskParam::Download(DownloadParam {
-          src: url::Url::parse(&url).map_err(|_| LauncherConfigError::FetchError)?,
-          dest: download_cache_dir.join(&fname),
-          filename: Some(fname),
-          sha1: None,
-        })],
-        true,
-      )
-      .await?;
-
-      return Ok(());
-    }
-  }
-
-  Err(LauncherConfigError::FetchError.into())
+  Ok(())
 }
-
 #[cfg(target_os = "windows")]
 pub async fn install_update_windows(
   app: &AppHandle,
@@ -361,4 +340,5 @@ rm -rf "$TMPDIR" || true
   }
   Ok(())
 }
+
 

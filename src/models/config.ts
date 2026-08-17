@@ -397,6 +397,7 @@ export const defaultConfig: LauncherConfig = {
 export interface VersionMetaInfo {
   version: string;
   fileName: string;
+  downloadUrl?: string;
   releaseNotes?: string;
   publishedAt?: string;
 }
@@ -406,3 +407,4 @@ export const defaultVersionMetaInfo: VersionMetaInfo = {
   version: "",
   fileName: "",
 };
+
