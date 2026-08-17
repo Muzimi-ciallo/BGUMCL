@@ -674,4 +674,20 @@ export class InstanceService {
       manifestUrl,
     });
   }
+
+  /**
+   * SET the modpack version for an instance.
+   * @param {string} instanceId - The ID of the instance.
+   * @param {string} version - The modpack version number.
+   * @returns {Promise<InvokeResponse<void>>}
+   */
+  static async setModpackVersion(
+    instanceId: string,
+    version: string
+  ): Promise<InvokeResponse<void>> {
+    return await invoke("set_modpack_version", {
+      instanceId,
+      version,
+    });
+  }
 }

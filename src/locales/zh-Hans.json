@@ -1632,6 +1632,9 @@
     },
     "modpackUpdate": {
       "title": "整合包更新",
+      "editVersion": "修改版本号",
+      "versionPlaceholder": "整合包版本号",
+      "versionSaved": "整合包版本号已保存",
       "current": "当前版本：{{version}}",
       "latest": "最新版本：{{version}}",
       "unknown": "未知",
@@ -3269,4 +3272,5 @@
     }
   }
 }
+
 
