@@ -56,8 +56,9 @@ pub async fn login(app: &AppHandle, username: String, raw_uuid: String) -> BGUMC
       access_token: None,
       access_token_expires: None,
       refresh_token: None,
-      textures: load_preset_skin(app, preset_role)?,
+      textures: load_preset_skin(app, preset_role).unwrap_or_default(),
     }
     .with_generated_id(),
   )
 }
+
