@@ -1,8 +1,9 @@
 name: Update manifest on release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -11,28 +12,26 @@ jobs:
   update-manifest:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Update update.json
         env:
-          TAG: ${{ github.event.release.tag_name }}
-          BODY: ${{ github.event.release.body }}
-          PUBLISHED_AT: ${{ github.event.release.published_at }}
+          REF_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           python3 <<'PY'
           import json, os
-          tag = os.environ["TAG"]
-          body = os.environ.get("BODY", "")
-          published_at = os.environ.get("PUBLISHED_AT", "")
+          ref = os.environ["REF_NAME"]
           repo = os.environ["REPO"]
-          version = tag[1:] if tag.startswith("v") else tag
+          version = ref[1:] if ref.startswith("v") else ref
           data = {
               "version": version,
-              "base_url": f"https://github.com/{repo}/releases/download/{tag}",
-              "release_notes": body,
-              "published_at": published_at,
+              "base_url": f"https://github.com/{repo}/releases/download/{ref}",
+              "release_notes": "",
+              "published_at": "",
           }
           with open("update.json", "w", encoding="utf-8") as f:
               json.dump(data, f, ensure_ascii=False, indent=2)
@@ -42,7 +41,7 @@ jobs:
 
       - name: Commit update.json
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -51,7 +50,7 @@ jobs:
             echo "update.json unchanged"
             exit 0
           fi
-          git commit -m "chore: update update.json to ${TAG}"
+          git commit -m "chore: update update.json to ${REF_NAME}"
           git push
 
       - name: Purge jsDelivr cache
