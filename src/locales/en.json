@@ -1632,6 +1632,9 @@
     },
     "modpackUpdate": {
       "title": "Modpack Update",
+      "editVersion": "Edit version",
+      "versionPlaceholder": "Modpack version",
+      "versionSaved": "Modpack version saved",
       "current": "Current version: {{version}}",
       "latest": "Latest version: {{version}}",
       "unknown": "Unknown",
@@ -3269,4 +3272,5 @@
     }
   }
 }
+
 

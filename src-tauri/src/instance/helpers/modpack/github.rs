@@ -300,6 +300,31 @@ pub async fn set_github_modpack_update_channel(
   Ok(())
 }
 
+#[tauri::command]
+pub async fn set_modpack_version(
+  app: AppHandle,
+  instance_id: String,
+  version: String,
+) -> BGUMCLResult<()> {
+  let instance = get_instance(&app, &instance_id)?;
+  let trimmed = version.trim().to_string();
+  if trimmed.is_empty() {
+    return Err(BGUMCLError("Version cannot be empty".to_string()));
+  }
+  let mut updated = instance.clone();
+  updated.modpack_version = Some(trimmed.clone());
+  updated.save_json_cfg().await?;
+  {
+    let binding = app.state::<Mutex<HashMap<String, Instance>>>();
+    let mut state = binding
+      .lock()
+      .map_err(|_| BGUMCLError("Failed to lock instance state".to_string()))?;
+    if let Some(inst) = state.get_mut(&instance_id) {
+      inst.modpack_version = Some(trimmed);
+    }
+  }
+  Ok(())
+}
 async fn finalize_update(
   app: &AppHandle,
   instance: &Instance,

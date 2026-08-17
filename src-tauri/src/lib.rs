@@ -163,6 +163,7 @@ pub async fn run() {
         instance::helpers::modpack::github::check_github_modpack_update,
         instance::helpers::modpack::github::apply_github_modpack_update,
         instance::helpers::modpack::github::set_github_modpack_update_channel,
+    instance::helpers::modpack::github::set_modpack_version,
         launch::commands::select_suitable_jre,
         launch::commands::validate_game_files,
         launch::commands::validate_selected_player,
