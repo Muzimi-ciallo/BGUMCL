@@ -29,7 +29,7 @@ jobs:
           version = ref[1:] if ref.startswith("v") else ref
           data = {
               "version": version,
-              "base_url": f"https://github.com/{repo}/releases/download/{ref}",
+              "base_url": f"https://ghproxy.net/https://github.com/{repo}/releases/download/{ref}",
               "release_notes": "",
               "published_at": "",
           }
@@ -56,3 +56,4 @@ jobs:
       - name: Purge jsDelivr cache
         run: |
           curl -fsS "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/update.json"
+
