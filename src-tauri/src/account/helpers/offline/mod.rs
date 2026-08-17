@@ -13,19 +13,24 @@ use crate::utils::fs::get_app_resource_filepath;
 use crate::utils::image::load_image_from_dir;
 
 pub fn load_preset_skin(app: &AppHandle, preset_role: PresetRole) -> BGUMCLResult<Vec<Texture>> {
-  let texture_path = get_app_resource_filepath(app, &format!("assets/skins/{}.png", preset_role))
-    .map_err(|_| AccountError::TextureError)?;
+  let model = if preset_role == PresetRole::Alex {
+    SkinModel::Slim
+  } else {
+    SkinModel::Default
+  };
 
-  let texture_img = load_image_from_dir(&texture_path).ok_or(AccountError::TextureError)?;
+  // Try to load the bundled preset skin PNG. If it is missing for any reason
+  // (e.g. portable assets not extracted), fall back to a solid-color placeholder
+  // so offline account creation never fails and never returns an empty texture list.
+  let texture_img = get_app_resource_filepath(app, &format!("assets/skins/{}.png", preset_role))
+    .ok()
+    .and_then(|path| load_image_from_dir(&path))
+    .unwrap_or_else(|| image::RgbaImage::from_pixel(8, 8, image::Rgba([143, 168, 168, 255])));
 
   Ok(vec![Texture {
     texture_type: TextureType::Skin,
     image: texture_img.into(),
-    model: if preset_role == PresetRole::Alex {
-      SkinModel::Slim
-    } else {
-      SkinModel::Default
-    },
+    model,
     preset: Some(preset_role),
   }])
 }
@@ -56,9 +61,10 @@ pub async fn login(app: &AppHandle, username: String, raw_uuid: String) -> BGUMC
       access_token: None,
       access_token_expires: None,
       refresh_token: None,
-      textures: load_preset_skin(app, preset_role).unwrap_or_default(),
+      textures: load_preset_skin(app, preset_role)?,
     }
     .with_generated_id(),
   )
 }
+
 
