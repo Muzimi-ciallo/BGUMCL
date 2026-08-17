@@ -16,8 +16,6 @@ use tokio::sync::Semaphore;
 use url::Url;
 use zip::read::ZipArchive;
 
-const DEFAULT_MODPACK_UPDATE_CHANNEL: &str =
-  "https://raw.githubusercontent.com/Muzimi-ciallo/BBGU-Minecraft-sever/main/sjmcl-update.json";
 
 use crate::instance::helpers::client_json::{
   McClientInfo, remove_mod_loader_from_client_info, remove_optifine_from_client_info,
@@ -1106,7 +1104,7 @@ pub async fn create_instance(
     use_spec_game_config: false,
     spec_game_config: None,
     modpack_version: modpack_version.clone(),
-    modpack_update_channel: Some(DEFAULT_MODPACK_UPDATE_CHANNEL.to_string()),
+    modpack_update_channel: None,
   };
 
   // Download version info

@@ -63,8 +63,6 @@ import {
 import { getInstanceIconSrc, parseModLoaderVersion } from "@/utils/instance";
 import { base64ImgSrc } from "@/utils/string";
 
-const DEFAULT_MODPACK_UPDATE_URL =
-  "https://raw.githubusercontent.com/Muzimi-ciallo/BBGU-Minecraft-sever/main/sjmcl-update.json";
 
 // All these widgets are used in InstanceContext with WarpCard wrapped.
 interface InstanceWidgetBaseProps extends Omit<BoxProps, "children"> {
@@ -536,7 +534,7 @@ export const InstanceModpackUpdateWidget = () => {
   const { id } = router.query;
   const instanceId = Array.isArray(id) ? id[0] : id;
 
-  const [channelInput, setChannelInput] = useState(DEFAULT_MODPACK_UPDATE_URL);
+  const [channelInput, setChannelInput] = useState("");
   const [isEditingChannel, setIsEditingChannel] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -709,7 +707,7 @@ export const InstanceModpackUpdateWidget = () => {
                 variant="ghost"
                 colorScheme={primaryColor}
                 onClick={() => {
-                  setChannelInput(configuredChannel || DEFAULT_MODPACK_UPDATE_URL);
+                  setChannelInput(configuredChannel || "");
                   setIsEditingChannel(true);
                 }}
               >
