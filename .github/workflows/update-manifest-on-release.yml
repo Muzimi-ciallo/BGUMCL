@@ -1,0 +1,59 @@
+name: Update manifest on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update update.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          BODY: ${{ github.event.release.body }}
+          PUBLISHED_AT: ${{ github.event.release.published_at }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 <<'PY'
+          import json, os
+          tag = os.environ["TAG"]
+          body = os.environ.get("BODY", "")
+          published_at = os.environ.get("PUBLISHED_AT", "")
+          repo = os.environ["REPO"]
+          version = tag[1:] if tag.startswith("v") else tag
+          data = {
+              "version": version,
+              "base_url": f"https://github.com/{repo}/releases/download/{tag}",
+              "release_notes": body,
+              "published_at": published_at,
+          }
+          with open("update.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          print("wrote update.json:", data)
+          PY
+
+      - name: Commit update.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add update.json
+          if git diff --cached --quiet; then
+            echo "update.json unchanged"
+            exit 0
+          fi
+          git commit -m "chore: update update.json to ${TAG}"
+          git push
+
+      - name: Purge jsDelivr cache
+        run: |
+          curl -fsS "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/update.json"
