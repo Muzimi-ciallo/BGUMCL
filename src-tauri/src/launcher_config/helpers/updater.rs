@@ -17,16 +17,10 @@ const MANIFEST_URL: &str = "https://cdn.jsdelivr.net/gh/Muzimi-ciallo/BGUMCL@mai
 const DOWNLOAD_BASE_URL: &str = "https://github.com/Muzimi-ciallo/BGUMCL/releases/download";
 
 // Generate the new version filename on remote origin according to the current os, arch and is_portable
-fn build_resource_filename(ver: &str, os: &str, arch: &str, is_portable: bool) -> String {
+fn build_resource_filename(ver: &str, os: &str, arch: &str) -> String {
   let arch = if arch == "x86" { "i686" } else { arch };
   let suffix = match os {
-    "windows" => {
-      if is_portable {
-        "_portable.exe"
-      } else {
-        "_setup.exe"
-      }
-    }
+    "windows" => "_portable.exe",
     "linux" => "_portable",
     "macos" => ".app.tar.gz",
     _ => "",
@@ -53,12 +47,11 @@ pub async fn fetch_latest_version(
   app: &AppHandle,
 ) -> BGUMCLResult<Option<(String, String, String, String, String)>> {
   let config_binding = app.state::<Mutex<LauncherConfig>>();
-  let (os, arch, is_portable, _is_china_mainland_ip) = {
+  let (os, arch, _is_china_mainland_ip) = {
     let config_state = config_binding.lock()?;
     (
       config_state.basic_info.os_type.clone(),
       config_state.basic_info.arch.clone(),
-      config_state.basic_info.is_portable,
       config_state.basic_info.is_china_mainland_ip,
     )
   };
@@ -84,7 +77,7 @@ pub async fn fetch_latest_version(
     .unwrap_or(DOWNLOAD_BASE_URL)
     .trim_end_matches('/')
     .to_string();
-  let fname = build_resource_filename(&ver, os.as_str(), arch.as_str(), is_portable);
+  let fname = build_resource_filename(&ver, os.as_str(), arch.as_str());
   let download_url = format!("{}/{}", base_url, fname);
 
   let release_notes = j
@@ -142,7 +135,7 @@ pub async fn install_update_windows(
   use std::os::windows::process::CommandExt;
 
   let config_binding = app.state::<Mutex<LauncherConfig>>();
-  let (old_version, downloaded_path, new_version, is_portable) = {
+  let (old_version, downloaded_path, new_version) = {
     let config_state = config_binding.lock()?;
     (
       config_state.basic_info.launcher_version.clone(),
@@ -156,13 +149,11 @@ pub async fn install_update_windows(
         .nth(1)
         .map(|s| s.to_string())
         .unwrap_or_else(|| config_state.basic_info.launcher_version.clone()),
-      config_state.basic_info.is_portable,
     )
   };
   let cur_exe = std::env::current_exe()?;
 
-  if is_portable {
-    // Portable: replace current exe with the newly downloaded one via a temp cmd script.
+  // Portable: replace current exe with the newly downloaded one via a temp cmd script.
     let cur_dir = cur_exe
       .parent()
       .ok_or_else(|| BGUMCLError("No parent dir for exe".to_string()))?;
@@ -227,17 +218,7 @@ try {
       app.exit(0);
     }
     Ok(())
-  } else {
-    // Installed (NSIS): run the downloaded installer directly.
-    if restart {
-      let _ = Command::new(&downloaded_path)
-        .args(["/UPDATE", "/P"])
-        .creation_flags(0x08000000)
-        .spawn()?;
-      app.exit(0);
-    }
-    Ok(())
-  }
+
 }
 
 #[cfg(target_os = "macos")]
