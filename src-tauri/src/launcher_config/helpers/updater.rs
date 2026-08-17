@@ -57,15 +57,22 @@ pub async fn fetch_latest_version(
   };
   let client = app.state::<reqwest::Client>();
 
-  let resp = client
-    .get(MANIFEST_URL)
-    .send()
-    .await
-    .map_err(|_| LauncherConfigError::FetchError)?;
-  let j: Value = resp
-    .json()
-    .await
-    .map_err(|_| LauncherConfigError::FetchError)?;
+  let mut j: Option<Value> = None;
+  for attempt in 0..3u32 {
+    match client.get(MANIFEST_URL).send().await {
+      Ok(resp) if resp.status().is_success() => {
+        if let Ok(parsed) = resp.json::<Value>().await {
+          j = Some(parsed);
+          break;
+        }
+      }
+      _ => {}
+    }
+    if attempt < 2 {
+      tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    }
+  }
+  let j = j.ok_or(LauncherConfigError::FetchError)?;
 
   let Some(ver) = j.get("version").and_then(|v| v.as_str()) else {
     return Err(LauncherConfigError::FetchError.into());
