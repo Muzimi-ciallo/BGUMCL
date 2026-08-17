@@ -3,7 +3,6 @@ import {
   AlertIcon,
   Button,
   HStack,
-  Image,
   Link,
   Modal,
   ModalBody,
@@ -62,7 +61,6 @@ const WelcomeAndTermsModal: React.FC<Omit<ModalProps, "children">> = ({
     >
       <ModalOverlay />
       <ModalContent borderRadius="md" overflow="hidden">
-        <Image alt="banner" src="/images/banner.png" />
         <ModalHeader>
           🎉&nbsp;&nbsp;{t("WelcomeAndTermsModal.header.title")}
         </ModalHeader>
@@ -140,3 +138,5 @@ const WelcomeAndTermsModal: React.FC<Omit<ModalProps, "children">> = ({
 };
 
 export default WelcomeAndTermsModal;
+
+
