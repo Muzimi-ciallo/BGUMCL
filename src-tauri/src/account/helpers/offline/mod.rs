@@ -25,7 +25,7 @@ pub fn load_preset_skin(app: &AppHandle, preset_role: PresetRole) -> BGUMCLResul
   let texture_img = get_app_resource_filepath(app, &format!("assets/skins/{}.png", preset_role))
     .ok()
     .and_then(|path| load_image_from_dir(&path))
-    .unwrap_or_else(|| image::RgbaImage::from_pixel(8, 8, image::Rgba([143, 168, 168, 255])));
+    .unwrap_or_else(|| image::RgbaImage::from_pixel(64, 64, image::Rgba([143, 168, 168, 255])));
 
   Ok(vec![Texture {
     texture_type: TextureType::Skin,
@@ -66,5 +66,6 @@ pub async fn login(app: &AppHandle, username: String, raw_uuid: String) -> BGUMC
     .with_generated_id(),
   )
 }
+
 
 
