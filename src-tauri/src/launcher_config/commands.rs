@@ -349,7 +349,7 @@ pub async fn check_launcher_update(app: AppHandle) -> BGUMCLResult<VersionMetaIn
     return Ok(VersionMetaInfo::default());
   }
 
-  if let Ok(Some((new_version, fname, release_notes, published_at))) =
+  if let Ok(Some((new_version, fname, download_url, release_notes, published_at))) =
     fetch_latest_version(&app).await
     && let (Ok(current), Ok(latest)) = (
       semver::Version::parse(&current_version),
@@ -360,6 +360,7 @@ pub async fn check_launcher_update(app: AppHandle) -> BGUMCLResult<VersionMetaIn
       std::cmp::Ordering::Greater => VersionMetaInfo {
         version: new_version,
         file_name: fname,
+        download_url: Some(download_url),
         release_notes,
         published_at,
       },
@@ -380,7 +381,7 @@ pub async fn download_launcher_update(app: AppHandle, version: VersionMetaInfo) 
     Ok(())
   } else {
     // TODO: handle already downloaded case
-    return download_target_version(&app, version.version, version.file_name).await;
+    return download_target_version(&app, version.version, version.file_name, version.download_url).await;
   }
 }
 
@@ -414,3 +415,4 @@ pub fn retrieve_supported_graphics_renderers(api: String) -> BGUMCLResult<Vec<St
 
   Ok(supported_graphics_renderers(&api))
 }
+
