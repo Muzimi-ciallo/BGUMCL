@@ -37,8 +37,7 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
 
   const handleDownloadUpdate = () => {
     if (isLinux) {
-      const lang = isZh ? "zh" : "en";
-      openUrl(`https://mc.sjtu.cn/sjmcl/${lang}`);
+      openUrl("https://github.com/Muzimi-ciallo/BGUMCL/releases");
     } else {
       ConfigService.downloadLauncherUpdate(newVersion).then((response) => {
         if (response.status !== "success") {
@@ -102,3 +101,4 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
 };
 
 export default NotifyNewVersionModal;
+
