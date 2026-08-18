@@ -37,10 +37,12 @@ import { isDirNameInvalid, sanitizeFileName } from "@/utils/string";
 
 interface ImportModpackModalProps extends Omit<ModalProps, "children"> {
   path: string;
+  modpackUpdateChannel?: string;
 }
 
 const ImportModpackModal: React.FC<ImportModpackModalProps> = ({
   path,
+  modpackUpdateChannel,
   ...modalProps
 }) => {
   const { config } = useLauncherConfig();
@@ -136,6 +138,21 @@ const ImportModpackModal: React.FC<ImportModpackModalProps> = ({
         modpack.version
       );
       if (createResp.status === "success") {
+        if (modpackUpdateChannel) {
+          const instanceId = gameDirectory.name + ":" + name;
+          InstanceService.setGithubModpackUpdateChannel(
+            instanceId,
+            modpackUpdateChannel
+          ).then((res) => {
+            if (res.status !== "success") {
+              toast({
+                title: res.message,
+                description: res.details,
+                status: "warning",
+              });
+            }
+          });
+        }
         onClose();
         router.push("/downloads");
       } else {
