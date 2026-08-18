@@ -7,7 +7,6 @@ use tauri_plugin_http::reqwest::{self, RequestBuilder};
 use crate::account::constants::DEFAULT_POLLING_INTERVAL;
 use crate::account::models::{
   AccountError, AccountInfo, DeviceAuthResponseInfo, OAuthErrorResponse, OAuthTokens, PlayerInfo,
-  PlayerType,
 };
 use crate::launcher_config::models::LauncherConfig;
 use crate::utils::image::{ImageWrapper, decode_image};
