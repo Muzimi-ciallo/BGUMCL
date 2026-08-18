@@ -7,7 +7,7 @@ PublisherUrl: https://mc.sjtu.cn/
 PublisherSupportUrl: https://github.com/UNIkeEN/BGUMCL/issues
 Author: Shanghai Jiao Tong University Minecraft Club
 PackageName: BGUMCL
-PackageUrl: https://mc.sjtu.cn/sjmcl/en
+PackageUrl: https://mc.sjtu.cn/bgumcl/en
 License: GPL-3.0-only with additional terms (see LICENSE.EXTRA)
 LicenseUrl: https://github.com/UNIkeEN/BGUMCL/blob/main/LICENSE.EXTRA
 ShortDescription: Next-generation open-source cross-platform Minecraft launcher.

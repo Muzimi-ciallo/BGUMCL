@@ -1,5 +1,5 @@
 ---
-name: sjmcl-create-release
+name: bgumcl-create-release
 description: Prepare an BGUMCL release by checking commits since the latest release tag, validating the next semver tag, bumping versions, creating the release commit and tag, and drafting bilingual release notes. Use this skill when the user asks to create or prepare a release, bump a release version, create a release tag, or draft/refine release notes for a new BGUMCL version.
 ---
 

@@ -7,7 +7,7 @@ PublisherUrl: https://mc.sjtu.cn/
 PublisherSupportUrl: https://github.com/UNIkeEN/BGUMCL/issues
 Author: 上海交通大学 Minecraft 社
 PackageName: BGUMCL
-PackageUrl: https://mc.sjtu.cn/sjmcl
+PackageUrl: https://mc.sjtu.cn/bgumcl
 License: GPL-3.0-only with additional terms (see LICENSE.EXTRA)
 LicenseUrl: https://github.com/UNIkeEN/BGUMCL/blob/main/LICENSE.EXTRA
 ShortDescription: 新一代开源跨平台 Minecraft 启动器

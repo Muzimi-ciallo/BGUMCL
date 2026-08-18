@@ -1,5 +1,5 @@
 [package]
-name = "sjmcl-cli"
+name = "bgumcl-cli"
 version = "0.1.0"
 edition = "2024"
 

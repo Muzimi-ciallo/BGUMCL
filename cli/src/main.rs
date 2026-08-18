@@ -17,7 +17,7 @@ const DEFAULT_PORT: u16 = 18970;
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 5000;
 const RETRY_INTERVAL_MS: u64 = 250;
 
-const EXPECTED_SERVER_NAME: &str = "sjmcl-mcp";
+const EXPECTED_SERVER_NAME: &str = "bgumcl-mcp";
 const MCP_SERVER_HOST: &str = "127.0.0.1";
 const MCP_SERVER_PATH: &str = "/mcp";
 const RUN_BGUMCL_DEEPLINK: &str = "bgumcl://run-silently";
@@ -166,7 +166,7 @@ async fn connect_launcher(options: &CliOptions) -> Result<LauncherClient, String
   match try_connect(options.port).await {
     Ok(client) => Ok(client),
     Err(initial_err) => {
-      run_sjmcl_deeplink()?;
+      run_bgumcl_deeplink()?;
 
       let deadline = Instant::now() + std::time::Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS);
       let mut last_error = initial_err;
@@ -212,8 +212,8 @@ fn print_help(tools: Option<&[Tool]>, hint: Option<&str>) {
   println!("BGUMCL CLI {}", env!("CARGO_PKG_VERSION"));
   println!();
   println!("Usage:");
-  println!("  sjmcl-cli -h | --help");
-  println!("  sjmcl-cli [-p | --port <port>] <tool> [json-object]");
+  println!("  bgumcl-cli -h | --help");
+  println!("  bgumcl-cli [-p | --port <port>] <tool> [json-object]");
 
   if let Some(hint) = hint {
     println!();
@@ -320,7 +320,7 @@ fn parse_tool_arguments(args: &[String]) -> Result<Map<String, Value>, String> {
     .ok_or_else(|| "tool arguments must be a JSON object".to_string())
 }
 
-fn run_sjmcl_deeplink() -> Result<(), String> {
+fn run_bgumcl_deeplink() -> Result<(), String> {
   #[cfg(target_os = "macos")]
   let mut command = {
     let mut command = Command::new("open");

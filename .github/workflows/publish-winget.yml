@@ -165,7 +165,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          BRANCH_NAME="sjmc-sjmcl-${VERSION}"
+          BRANCH_NAME="sjmc-bgumcl-${VERSION}"
           MANIFEST_DIR="manifests/s/SJMC/BGUMCL/${VERSION}"
 
           git -C winget-pkgs config user.name "SJMC-Dev-Bot"

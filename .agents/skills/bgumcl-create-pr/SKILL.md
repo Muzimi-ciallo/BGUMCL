@@ -1,5 +1,5 @@
 ---
-name: sjmcl-create-pr
+name: bgumcl-create-pr
 description: Create pull requests for BGUMCL using the repository PR template and recent git history. Use this skill when the user asks to create/open a PR, draft PR title/body, summarize branch changes for a PR, or otherwise prepare PR content.
 ---
 
