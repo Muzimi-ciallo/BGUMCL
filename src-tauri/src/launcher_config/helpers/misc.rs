@@ -119,7 +119,7 @@ impl LauncherConfig {
       is_exe_path_available: check_exe_path_availability(app),
       // below set to default, will be updated later in first time calling `check_full_login_availability`
       is_china_mainland_ip: false,
-      allow_full_login_feature: false,
+      allow_full_login_feature: true,
       // build metadata: compile-time constants may be injected by build.rs
       build_type,
       build_commit_sha: option_env!("BGUMCL_COMMIT_SHA").unwrap_or("").to_string(),

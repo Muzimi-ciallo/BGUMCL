@@ -65,11 +65,6 @@ pub fn add_player(app: &AppHandle, new_player: PlayerInfo) -> BGUMCLResult<()> {
     let config_binding = app.state::<Mutex<LauncherConfig>>();
     let mut config_state = config_binding.lock()?;
 
-    if new_player.player_type != PlayerType::Microsoft
-      && !config_state.basic_info.allow_full_login_feature
-    {
-      return Err(AccountError::FullLoginUnavailable.into());
-    }
 
     if account_state
       .players
@@ -122,33 +117,17 @@ pub fn update_player_by_id(app: &AppHandle, player_id: &str, info: PlayerInfo) -
 }
 
 pub async fn check_full_login_availability(app: &AppHandle) -> BGUMCLResult<()> {
-  let loc_flag = is_china_mainland_ip(app).await;
-
-  let account_binding = app.state::<Mutex<AccountInfo>>();
-  let account_state = account_binding.lock()?;
+  // 更新地区标识（用于下载源等策略），但离线/第三方登录始终可用
+  let _ = is_china_mainland_ip(app).await;
 
   let config_binding = app.state::<Mutex<LauncherConfig>>();
   let mut config_state = config_binding.lock()?;
 
-  match loc_flag {
-    Some(true) => {
-      // in China (mainland), full account feature (offline and 3rd-party login) is always available
-      config_state.partial_update(
-        app,
-        "basic_info.allow_full_login_feature",
-        &serde_json::to_string(&true)?,
-      )?;
-    }
-    _ => {
-      // not in China (mainland) or cannot determine the IP
-      // check if any player has been added (not only microsoft type player, because user may delete it)
-      config_state.partial_update(
-        app,
-        "basic_info.allow_full_login_feature",
-        &serde_json::to_string(&!account_state.players.is_empty())?,
-      )?;
-    }
-  }
+  config_state.partial_update(
+    app,
+    "basic_info.allow_full_login_feature",
+    &serde_json::to_string(&true)?,
+  )?;
 
   config_state.save()?;
   Ok(())

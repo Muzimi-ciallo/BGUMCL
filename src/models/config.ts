@@ -278,7 +278,7 @@ export const defaultConfig: LauncherConfig = {
     isPortable: false,
     isExePathAvailable: true,
     isChinaMainlandIp: false,
-    allowFullLoginFeature: false,
+    allowFullLoginFeature: true,
     buildType: BuildType.Dev,
     buildCommitSha: "",
   },
