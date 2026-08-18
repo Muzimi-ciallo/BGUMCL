@@ -13,7 +13,7 @@ use crate::tasks::PTaskParam;
 use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 
-const MANIFEST_URL: &str = "https://cdn.jsdelivr.net/gh/Muzimi-ciallo/BGUMCL@main/update.json";
+const MANIFEST_URL: &str = "https://v4.gh-proxy.org/https://raw.githubusercontent.com/Muzimi-ciallo/BGUMCL/main/update.json";
 const DOWNLOAD_BASE_URL: &str = "https://github.com/Muzimi-ciallo/BGUMCL/releases/download";
 
 // Generate the new version filename on remote origin according to the current os, arch and is_portable
