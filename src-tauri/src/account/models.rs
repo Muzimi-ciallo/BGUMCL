@@ -331,7 +331,9 @@ impl AccountInfo {
 
 impl Storage for AccountInfo {
   fn file_path() -> PathBuf {
-    APP_DATA_DIR.get().unwrap().join(ACCOUNTS_FILE_NAME)
+    let path = APP_DATA_DIR.get().unwrap().join(ACCOUNTS_FILE_NAME);
+    crate::utils::fs::migrate_legacy_file(&path, "sjmcl.account.json");
+    path
   }
 }
 

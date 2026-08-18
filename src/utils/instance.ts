@@ -76,6 +76,7 @@ export const parseModLoaderVersion = (version: string): string => {
 
 export const isInstanceNameInvalid = (value: string): number => {
   // return number as specific error index (e.g. for displaying error message in Editable)
-  if (value.toLowerCase() === "sjmclcfg") return 2;
+  if (value.toLowerCase() === "bgumclcfg") return 2;
   return isDirNameInvalid(value);
 };
+

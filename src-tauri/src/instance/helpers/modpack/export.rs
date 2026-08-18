@@ -124,7 +124,7 @@ static BLACKLIST: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     "hmclversion.cfg",
     // BGUMCL
     "install_profile.json",
-    "sjmclcfg.json",
+    "bgumclcfg.json",
     // Curse
     "manifest.json",
     "minecraftinstance.json",
@@ -402,3 +402,4 @@ pub async fn create_modpack_zip(
   .await
   .map_err(|e| BGUMCLError(format!("Failed to join zip creation task: {}", e)))?
 }
+

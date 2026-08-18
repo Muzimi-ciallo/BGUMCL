@@ -430,11 +430,13 @@ impl LauncherConfig {
 
 impl Storage for LauncherConfig {
   fn file_path() -> PathBuf {
-    if *IS_PORTABLE {
+    let path = if *IS_PORTABLE {
       EXE_DIR.join(LAUNCHER_CFG_FILE_NAME)
     } else {
       APP_DATA_DIR.get().unwrap().join(LAUNCHER_CFG_FILE_NAME)
-    }
+    };
+    crate::utils::fs::migrate_legacy_file(&path, "sjmcl.conf.json");
+    path
   }
 }
 

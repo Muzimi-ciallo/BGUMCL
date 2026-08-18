@@ -111,7 +111,9 @@ structstruck::strike! {
 
 impl Instance {
   pub fn get_json_cfg_path(&self) -> PathBuf {
-    self.version_path.join(INSTANCE_CFG_FILE_NAME)
+    let path = self.version_path.join(INSTANCE_CFG_FILE_NAME);
+    crate::utils::fs::migrate_legacy_file(&path, "sjmclcfg.json");
+    path
   }
 
   pub async fn load_json_cfg(&self) -> Result<Self, std::io::Error>
