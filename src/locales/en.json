@@ -115,6 +115,10 @@
       "server": {
         "title": "Download Game Server",
         "description": "Download game server files for different versions"
+      },
+      "wanda": {
+        "title": "One-click Download Wanda University Server Modpack",
+        "description": "Download the Wanda University server modpack from GitHub and import it"
       }
     }
   },
@@ -3272,5 +3276,3 @@
     }
   }
 }
-
-

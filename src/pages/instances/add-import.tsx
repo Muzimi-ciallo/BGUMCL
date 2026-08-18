@@ -6,12 +6,14 @@ import {
   MenuItem,
   MenuList,
   Portal,
+  Spinner,
   Text,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useRouter } from "next/router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuArrowRight, LuCloudDownload, LuFolderPlus } from "react-icons/lu";
 import {
@@ -22,11 +24,32 @@ import { CreateInstanceModal } from "@/components/modals/create-instance-modal";
 import { DownloadGameServerModal } from "@/components/modals/download-game-server-modal";
 import DownloadModpackModal from "@/components/modals/download-modpack-modal";
 import { useSharedModals } from "@/contexts/shared-modal";
+import { useToast } from "@/contexts/toast";
+import { InstanceService } from "@/services/instance";
 
 const AddAndImportInstancePage = () => {
   const { t } = useTranslation();
   const router = useRouter();
   const { openSharedModal } = useSharedModals();
+  const toast = useToast();
+  const [isDownloadingWanda, setIsDownloadingWanda] = useState(false);
+
+  const handleDownloadWandaModpack = async () => {
+    if (isDownloadingWanda) return;
+    setIsDownloadingWanda(true);
+    try {
+      const res = await InstanceService.downloadWandaModpack();
+      if (res.status === "success") {
+        openSharedModal("import-modpack", { path: res.data });
+      } else {
+        toast({ title: res.message, description: res.details, status: "error" });
+      }
+    } catch (error) {
+      toast({ title: String(error), status: "error" });
+    } finally {
+      setIsDownloadingWanda(false);
+    }
+  };
 
   const {
     isOpen: isCreateInstanceModalOpen,
@@ -74,6 +97,7 @@ const AddAndImportInstancePage = () => {
 
   const moreOptions: Record<string, () => void> = {
     server: onOpenDownloadGameServerModal,
+    wanda: handleDownloadWandaModpack,
   };
 
   const modpackOperations = [
@@ -140,7 +164,12 @@ const AddAndImportInstancePage = () => {
         description: t(
           `AddAndImportInstancePage.moreOptions.${key}.description`
         ),
-        children: <Icon as={LuArrowRight} boxSize={3.5} mr="5px" />,
+        children:
+          key === "wanda" && isDownloadingWanda ? (
+            <Spinner size="sm" mr="5px" />
+          ) : (
+            <Icon as={LuArrowRight} boxSize={3.5} mr="5px" />
+          ),
         isFullClickZone: true,
         onClick: moreOptions[key],
       })),

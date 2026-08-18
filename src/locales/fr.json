@@ -115,6 +115,10 @@
       "server": {
         "title": "Télécharger le serveur",
         "description": "Télécharger les fichiers serveur de toutes les versions officielles du jeu"
+      },
+      "wanda": {
+        "title": "Télécharger le modpack du serveur de Wanda",
+        "description": "Télécharge et importe le modpack du serveur depuis GitHub"
       }
     }
   },
@@ -3269,4 +3273,3 @@
     }
   }
 }
-

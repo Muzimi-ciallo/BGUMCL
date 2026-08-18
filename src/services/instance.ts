@@ -576,6 +576,14 @@ export class InstanceService {
   }
 
   /**
+   * DOWNLOAD the Wanda University server modpack (.mrpack) from GitHub Releases.
+   * @returns {Promise<InvokeResponse<string>>} The local path to the downloaded modpack file.
+   */
+  @responseHandler("instance")
+  static async downloadWandaModpack(): Promise<InvokeResponse<string>> {
+    return await invoke("download_wanda_modpack");
+  }
+  /**
    * ADD/REPLACE the custom instance icon.
    * Backend will create (if missing) or replace (if existing) the custom icon file at <version_path>/icon.
    * @param {string} instanceId - The instance ID.
