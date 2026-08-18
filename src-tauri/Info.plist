@@ -10,7 +10,7 @@
         <string>BGUMCL Protocol</string>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>sjmcl</string>
+          <string>bgumcl</string>
         </array>
       </dict>
     </array>

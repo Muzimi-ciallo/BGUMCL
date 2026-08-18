@@ -32,9 +32,9 @@ use crate::launcher_config::models::{LauncherConfig, ProxyType};
 /// # Example
 ///
 /// ```rust
-/// let client = build_sjmcl_client(&app, true);
+/// let client = build_bgumcl_client(&app, true);
 /// ```
-pub fn build_sjmcl_client(app: &AppHandle, use_proxy: bool) -> Client {
+pub fn build_bgumcl_client(app: &AppHandle, use_proxy: bool) -> Client {
   let mut builder = ClientBuilder::new()
     .timeout(Duration::from_secs(10))
     .tcp_keepalive(Duration::from_secs(10));

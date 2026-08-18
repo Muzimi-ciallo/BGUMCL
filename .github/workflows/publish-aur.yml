@@ -125,7 +125,7 @@ jobs:
       - name: Publish BGUMCL to the AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.2
         with:
-          pkgname: sjmcl-bin
+          pkgname: bgumcl-bin
           pkgbuild: ${{ github.workspace }}/PKGBUILD
           assets: ${{ github.workspace }}/LICENSE.EXTRA
           commit_username: SJMC

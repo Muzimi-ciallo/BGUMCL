@@ -1,5 +1,5 @@
 ---
-name: sjmcl-commit-msg
+name: bgumcl-commit-msg
 description: Generate a single-line commit message for BGUMCL by reading the staged changes and recent commit style. Use this skill when the user asks for a commit message, says commit msg, or wants one-line text that covers all staged changes.
 ---
 

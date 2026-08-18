@@ -1,4 +1,4 @@
-name: sjmcl
+name: bgumcl
 base: core22
 version: '0.0.0'
 summary: BGUMCL Minecraft Launcher
@@ -9,7 +9,7 @@ grade: stable
 confinement: strict
 
 apps:
-  sjmcl:
+  bgumcl:
     command: usr/bin/BGUMCL
     desktop: usr/share/applications/BGUMCL.desktop
     extensions: [gnome]
@@ -29,7 +29,7 @@ apps:
       - home
 
 parts:
-  sjmcl-payload:
+  bgumcl-payload:
     plugin: dump
     source: snap-payload
     stage-packages:
@@ -39,7 +39,7 @@ parts:
 
   cleanup:
     after:
-      - sjmcl-payload
+      - bgumcl-payload
     plugin: nil
     build-snaps:
       - core22

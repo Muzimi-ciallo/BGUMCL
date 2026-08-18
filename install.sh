@@ -6,8 +6,8 @@ REPO="${BGUMCL_REPO:-UNIkeEN/BGUMCL}"
 VERSION_INPUT="${BGUMCL_VERSION:-}"
 INSTALL_MODE="package"
 DOWNLOAD_SOURCE="auto"
-SJMC_RELEASE_API="https://mc.sjtu.cn/api-sjmcl/releases/latest"
-SJMC_RELEASE_BASE="https://mc.sjtu.cn/sjmcl/releases"
+SJMC_RELEASE_API="https://mc.sjtu.cn/api-bgumcl/releases/latest"
+SJMC_RELEASE_BASE="https://mc.sjtu.cn/bgumcl/releases"
 CURL_CONNECT_TIMEOUT="10"
 CURL_METADATA_MAX_TIME="15"
 
@@ -32,7 +32,7 @@ Usage:
   install.sh [--portable] [--source <auto|github|sjmc>]
 
 Options:
-  --portable          Install the portable binary to ~/.sjmcl and link it from ~/.local/bin.
+  --portable          Install the portable binary to ~/.bgumcl and link it from ~/.local/bin.
   --source <source>   Select download source: auto, github, or sjmc. Defaults to auto.
   -h, --help          Show this help message.
 
@@ -113,7 +113,7 @@ if [ "$INSTALL_MODE" = "package" ]; then
     PACKAGE_TYPE="rpm"
     INSTALL_CMD="zypper"
   elif command -v pacman >/dev/null 2>&1; then
-    fail "Arch Linux users should install BGUMCL from AUR instead: yay -S sjmcl-bin"
+    fail "Arch Linux users should install BGUMCL from AUR instead: yay -S bgumcl-bin"
   else
     fail "this installer requires apt, dnf, yum, or zypper"
   fi
@@ -241,10 +241,10 @@ if [ "$INSTALL_MODE" = "portable" ]; then
   HOME_DIR="${HOME:-}"
   [ -n "$HOME_DIR" ] || fail "HOME is not set; cannot install portable BGUMCL"
 
-  INSTALL_DIR="$HOME_DIR/.sjmcl"
+  INSTALL_DIR="$HOME_DIR/.bgumcl"
   LOCAL_BIN_DIR="$HOME_DIR/.local/bin"
   PORTABLE_PATH="$INSTALL_DIR/BGUMCL"
-  LINK_PATH="$LOCAL_BIN_DIR/sjmcl"
+  LINK_PATH="$LOCAL_BIN_DIR/bgumcl"
 
   mkdir -p "$INSTALL_DIR" "$LOCAL_BIN_DIR"
   cp "$PACKAGE_PATH" "$PORTABLE_PATH"
@@ -267,9 +267,9 @@ if [ "$INSTALL_MODE" = "portable" ]; then
       ;;
   esac
 
-  FOUND_BGUMCL="$(command -v sjmcl 2>/dev/null || true)"
+  FOUND_BGUMCL="$(command -v bgumcl 2>/dev/null || true)"
   if [ -n "$FOUND_BGUMCL" ] && [ "$FOUND_BGUMCL" != "$LINK_PATH" ]; then
-    log "Note: 'sjmcl' currently resolves to $FOUND_BGUMCL."
+    log "Note: 'bgumcl' currently resolves to $FOUND_BGUMCL."
     log "Your shell may run that version before the portable install at $LINK_PATH."
   fi
 

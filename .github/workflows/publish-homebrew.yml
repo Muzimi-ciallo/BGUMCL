@@ -100,8 +100,8 @@ jobs:
           mkdir -p homebrew-tap/Casks
 
           ruby <<'RUBY'
-          template_path = ".github/homebrew/sjmcl.rb.template"
-          output_path = "homebrew-tap/Casks/sjmcl.rb"
+          template_path = ".github/homebrew/bgumcl.rb.template"
+          output_path = "homebrew-tap/Casks/bgumcl.rb"
 
           content = File.read(template_path)
           replacements = {
@@ -117,21 +117,21 @@ jobs:
           File.write(output_path, content)
           RUBY
 
-          ruby -c homebrew-tap/Casks/sjmcl.rb
-          git -C homebrew-tap diff -- Casks/sjmcl.rb
+          ruby -c homebrew-tap/Casks/bgumcl.rb
+          git -C homebrew-tap diff -- Casks/bgumcl.rb
 
       - name: Commit and push tap update
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if git -C homebrew-tap diff --quiet -- Casks/sjmcl.rb; then
+          if git -C homebrew-tap diff --quiet -- Casks/bgumcl.rb; then
             echo "Homebrew cask is already up to date."
             exit 0
           fi
 
           git -C homebrew-tap config user.name "github-actions[bot]"
           git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C homebrew-tap add Casks/sjmcl.rb
+          git -C homebrew-tap add Casks/bgumcl.rb
           git -C homebrew-tap commit -m "Update BGUMCL cask to ${VERSION}"
           git -C homebrew-tap push

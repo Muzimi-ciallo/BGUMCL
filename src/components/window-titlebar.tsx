@@ -170,7 +170,7 @@ const WindowTitlebar = () => {
   // Remove decorum fallback titlebar if it was created before React host mounted.
   useEffect(() => {
     if (typeof window === "undefined" || !isWindows) return;
-    const host = document.getElementById("sjmcl-window-decorum-host");
+    const host = document.getElementById("bgumcl-window-decorum-host");
     if (!host) return;
 
     const allHosts = Array.from(
@@ -229,7 +229,7 @@ const WindowTitlebar = () => {
         <MainWindowExtensionTitle />
       )}
       <Flex
-        id="sjmcl-window-drag-region"
+        id="bgumcl-window-drag-region"
         data-tauri-drag-region
         flex="1"
         h="100%"
@@ -255,7 +255,7 @@ const WindowTitlebar = () => {
       </Flex>
       {isWindows && (
         <HStack
-          id="sjmcl-window-decorum-host"
+          id="bgumcl-window-decorum-host"
           data-tauri-decorum-tb
           spacing={0}
           h="100%"

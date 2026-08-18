@@ -79,7 +79,7 @@ BGUMCL/
 BGUMCL 的扩展系统允许开发者在不修改核心代码的情况下添加各类有趣功能
 
 - 我们推荐使用 [脚手架](https://www.npmjs.com/package/create-sjmcl-extension) 初始化项目。
-- 具体的扩展接口可以参考 [API 文档](https://mc.sjtu.cn/sjmcl/dev/extension/api.html) 或 `src/contexts/extension/host.tsx`。
+- 具体的扩展接口可以参考 [API 文档](https://mc.sjtu.cn/bgumcl/dev/extension/api.html) 或 `src/contexts/extension/host.tsx`。
 - 开发完成后，可以在 [社区精选列表](https://github.com/SJMC-Dev/awesome-BGUMCL-extensions) 提交扩展。
 
 ---
