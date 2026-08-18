@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_http::reqwest;
 use tokio;
@@ -1667,6 +1668,65 @@ pub async fn retrieve_modpack_meta_info(
   ModpackMetaInfo::from_archive(&app, &file).await
 }
 
+#[tauri::command]
+pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
+  const API_URL: &str = "https://v4.gh-proxy.org/https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest";
+
+  let client = app.state::<reqwest::Client>();
+
+  let resp = client
+    .get(API_URL)
+    .send()
+    .await
+    .map_err(|_| InstanceError::NetworkError)?;
+  let json: serde_json::Value = resp
+    .json()
+    .await
+    .map_err(|_| InstanceError::NetworkError)?;
+
+  let asset = json
+    .get("assets")
+    .and_then(|v| v.as_array())
+    .and_then(|assets| {
+      assets.iter().find(|a| {
+        a.get("name")
+          .and_then(|n| n.as_str())
+          .map(|n| n.ends_with(".mrpack"))
+          .unwrap_or(false)
+      })
+    })
+    .ok_or(InstanceError::NetworkError)?;
+
+  let name = asset
+    .get("name")
+    .and_then(|n| n.as_str())
+    .unwrap_or("wanda-server-modpack.mrpack")
+    .to_string();
+  let url = asset
+    .get("browser_download_url")
+    .and_then(|u| u.as_str())
+    .ok_or(InstanceError::NetworkError)?;
+
+  let download_url = format!("https://v4.gh-proxy.org/{}", url);
+  let bytes = client
+    .get(&download_url)
+    .send()
+    .await
+    .map_err(|_| InstanceError::NetworkError)?
+    .bytes()
+    .await
+    .map_err(|_| InstanceError::NetworkError)?;
+
+  let dest_dir = app
+    .path()
+    .resolve::<PathBuf>("Download".into(), BaseDirectory::AppCache)
+    .map_err(|_| InstanceError::NetworkError)?;
+  fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
+  let dest = dest_dir.join(&name);
+  fs::write(&dest, &bytes).map_err(|_| InstanceError::FileCreationFailed)?;
+
+  Ok(dest.to_string_lossy().to_string())
+}
 #[tauri::command]
 pub fn add_custom_instance_icon(
   app: AppHandle,

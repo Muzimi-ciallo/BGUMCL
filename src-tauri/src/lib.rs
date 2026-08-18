@@ -157,6 +157,7 @@ pub async fn run() {
         instance::commands::remove_mod_loader,
         instance::commands::remove_optifine,
         instance::commands::retrieve_modpack_meta_info,
+instance::commands::download_wanda_modpack,
         instance::commands::add_custom_instance_icon,
         instance::commands::retrieve_exportable_file_list,
         instance::commands::export_modpack,
