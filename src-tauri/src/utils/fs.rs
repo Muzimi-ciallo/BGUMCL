@@ -13,6 +13,20 @@ use zip::write::{ExtendedFileOptions, FileOptions};
 use zip::{CompressionMethod, ZipWriter};
 
 use crate::IS_PORTABLE;
+/// Renames a legacy-named config file to its new name (e.g. sjmcl.conf.json -> bgumcl.conf.json)
+/// when the new file does not exist yet. Used to migrate user data after renaming config files.
+pub fn migrate_legacy_file(new_path: &Path, legacy_name: &str) {
+  if new_path.exists() {
+    return;
+  }
+  let legacy_path = new_path
+    .parent()
+    .unwrap_or_else(|| Path::new("."))
+    .join(legacy_name);
+  if legacy_path.exists() {
+    let _ = fs::rename(&legacy_path, new_path);
+  }
+}
 
 /// Recursively copies the contents of a source directory to a destination directory.
 ///
