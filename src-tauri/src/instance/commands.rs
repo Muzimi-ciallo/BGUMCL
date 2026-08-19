@@ -1678,19 +1678,31 @@ pub async fn retrieve_modpack_meta_info(
 
 #[tauri::command]
 pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
-  const API_URL: &str = "https://v4.gh-proxy.org/https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest";
+  // Try the accelerated proxy first, then fall back to the direct GitHub API
+  // in case the proxy is unreachable or throttling on this machine.
+  const API_URLS: [&str; 2] = [
+    "https://v4.gh-proxy.org/https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
+    "https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
+  ];
 
-  let client = app.state::<reqwest::Client>();
+  // Use the dedicated download client (browser User-Agent + long timeout) so
+  // proxies do not throttle us and large files are not cut off.
+  let client = crate::tasks::download::download_client().clone();
 
-  let resp = client
-    .get(API_URL)
-    .send()
-    .await
-    .map_err(|_| InstanceError::NetworkError)?;
-  let json: serde_json::Value = resp
-    .json()
-    .await
-    .map_err(|_| InstanceError::NetworkError)?;
+  let mut json: Option<serde_json::Value> = None;
+  for api_url in API_URLS {
+    let Ok(resp) = client.get(api_url).send().await else {
+      continue;
+    };
+    let Ok(resp) = resp.error_for_status() else {
+      continue;
+    };
+    if let Ok(parsed) = resp.json::<serde_json::Value>().await {
+      json = Some(parsed);
+      break;
+    }
+  }
+  let json = json.ok_or(InstanceError::NetworkError)?;
 
   let asset = json
     .get("assets")
@@ -1715,23 +1727,56 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     .and_then(|u| u.as_str())
     .ok_or(InstanceError::NetworkError)?;
 
-  let download_url = format!("https://v4.gh-proxy.org/{}", url);
-  let bytes = client
-    .get(&download_url)
-    .send()
-    .await
-    .map_err(|_| InstanceError::NetworkError)?
-    .bytes()
-    .await
-    .map_err(|_| InstanceError::NetworkError)?;
-
   let dest_dir = app
     .path()
     .resolve::<PathBuf>("Download".into(), BaseDirectory::AppCache)
     .map_err(|_| InstanceError::NetworkError)?;
   fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
   let dest = dest_dir.join(&name);
-  fs::write(&dest, &bytes).map_err(|_| InstanceError::FileCreationFailed)?;
+
+  // Download the modpack file: proxy first, then direct GitHub.
+  let candidates = [
+    format!("https://v4.gh-proxy.org/{}", url),
+    url.to_string(),
+  ];
+  let mut downloaded = false;
+  for candidate in &candidates {
+    let Ok(resp) = client.get(candidate).send().await else {
+      continue;
+    };
+    let Ok(resp) = resp.error_for_status() else {
+      continue;
+    };
+    let mut file = match tokio::fs::File::create(&dest).await {
+      Ok(f) => f,
+      Err(_) => return Err(InstanceError::FileCreationFailed.into()),
+    };
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+    let mut stream = resp.bytes_stream();
+    let mut ok = true;
+    while let Some(chunk) = stream.next().await {
+      match chunk {
+        Ok(bytes) => {
+          if file.write_all(&bytes).await.is_err() {
+            ok = false;
+            break;
+          }
+        }
+        Err(_) => {
+          ok = false;
+          break;
+        }
+      }
+    }
+    if ok {
+      downloaded = true;
+      break;
+    }
+  }
+  if !downloaded {
+    return Err(InstanceError::NetworkError.into());
+  }
 
   Ok(dest.to_string_lossy().to_string())
 }

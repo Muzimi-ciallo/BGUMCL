@@ -33,7 +33,7 @@ use std::sync::OnceLock;
 /// (launcher updates / modpacks) are not cut off by the default 10s timeout.
 const DOWNLOAD_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-fn download_client() -> &'static reqwest::Client {
+pub(crate) fn download_client() -> &'static reqwest::Client {
   static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
   CLIENT.get_or_init(|| {
     reqwest::Client::builder()
