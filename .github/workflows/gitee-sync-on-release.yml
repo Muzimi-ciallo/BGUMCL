@@ -89,11 +89,10 @@ jobs:
           git fetch origin main
           git checkout main
           git pull --ff-only origin main || true
-          VERSION_NUM="$VERSION"
-          python3 - <<'PY'
-          import json, os
-          ver = os.environ["VERSION_NUM"]
-          tag = os.environ["TAG"]
+          python3 - <<PY
+          import json
+          ver = "$VERSION"
+          tag = "$TAG"
           data = {
               "version": ver,
               "base_url": f"https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/{tag}",
