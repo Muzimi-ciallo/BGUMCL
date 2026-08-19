@@ -25,6 +25,25 @@ use crate::tasks::streams::reporter::Reporter;
 use crate::tasks::*;
 use crate::utils::fs::validate_sha1;
 use crate::utils::web::with_retry;
+use std::sync::OnceLock;
+
+/// Browser-like User-Agent for file downloads. Some acceleration proxies
+/// (e.g. gh-proxy) throttle non-browser User-Agents, which made large update
+/// downloads extremely slow. Also use a long total timeout so big files
+/// (launcher updates / modpacks) are not cut off by the default 10s timeout.
+const DOWNLOAD_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+fn download_client() -> &'static reqwest::Client {
+  static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+  CLIENT.get_or_init(|| {
+    reqwest::Client::builder()
+      .timeout(Duration::from_secs(600))
+      .tcp_keepalive(Duration::from_secs(30))
+      .user_agent(DOWNLOAD_USER_AGENT)
+      .build()
+      .unwrap_or_else(|_| reqwest::Client::new())
+  })
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -124,12 +143,11 @@ impl DownloadTask {
   }
 
   async fn send_request(
-    app_handle: &AppHandle,
+    _app_handle: &AppHandle,
     current: i64,
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
-    let state = app_handle.state::<reqwest::Client>();
-    let client = with_retry(state.inner().clone());
+    let client = with_retry(download_client().clone());
     let mut request = if current == 0 {
       client.get(param.src.clone())
     } else {
