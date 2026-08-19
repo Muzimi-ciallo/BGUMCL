@@ -79,4 +79,3 @@ export const isInstanceNameInvalid = (value: string): number => {
   if (value.toLowerCase() === "bgumclcfg") return 2;
   return isDirNameInvalid(value);
 };
-

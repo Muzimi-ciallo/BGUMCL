@@ -41,12 +41,16 @@ const AddAndImportInstancePage = () => {
       const res = await InstanceService.downloadWandaModpack();
       if (res.status === "success") {
         openSharedModal("import-modpack", {
-        path: res.data,
-        modpackUpdateChannel:
-          "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BBGU-Minecraft-sever/blob/main/sjmcl-update.json",
-      });
+          path: res.data,
+          modpackUpdateChannel:
+            "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BBGU-Minecraft-sever/blob/main/sjmcl-update.json",
+        });
       } else {
-        toast({ title: res.message, description: res.details, status: "error" });
+        toast({
+          title: res.message,
+          description: res.details,
+          status: "error",
+        });
       }
     } catch (error) {
       toast({ title: String(error), status: "error" });

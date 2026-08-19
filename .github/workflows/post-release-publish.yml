@@ -6,9 +6,6 @@ on:
       release_tag:
         description: "Release tag to publish from, for example v1.2.3"
         required: true
-  release:
-    types:
-      - published
 
 permissions:
   contents: read

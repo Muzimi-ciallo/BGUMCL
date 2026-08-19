@@ -1,0 +1,130 @@
+name: Sync release to Gitee
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  sync-gitee:
+    runs-on: ubuntu-latest
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      GITEE_OWNER: Muzimimiao
+      GITEE_BGUMCL_REPO: BGUMCL
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare metadata
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          ASSET_NAME="BGUMCL_${VERSION}_windows_x86_64_portable.exe"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Download Windows portable asset from GitHub release
+        id: download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+        run: |
+          if gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | grep -Fxq "$ASSET_NAME"; then
+            gh release download "$TAG" --repo "${{ github.repository }}" --pattern "$ASSET_NAME" --dir .
+            echo "asset_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "asset_found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Gitee release (if missing)
+        shell: bash
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}"
+          EXISTS=$(curl -fsS -X GET "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" 2>/dev/null || true)
+          if echo "$EXISTS" | grep -q '"id"'; then
+            echo "Gitee release ${TAG} already exists."
+          else
+            curl -fsS -X POST "${API}/releases" \
+              -H "Content-Type: application/json" \
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"BGUMCL ${VERSION}\",\"body\":\"自动同步自 GitHub Release\",\"target_commitish\":\"main\"}"
+            echo "Created Gitee release ${TAG}."
+          fi
+
+      - name: Upload portable asset to Gitee release
+        if: steps.download.outputs.asset_found == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          ASSET_NAME: ${{ steps.meta.outputs.asset_name }}
+        run: |
+          API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}"
+          REL_ID=$(curl -fsS -X GET "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          curl -fsS -X POST "${API}/releases/${REL_ID}/attach_files" \
+            -F "access_token=${GITEE_TOKEN}" \
+            -F "file=@${ASSET_NAME}" || echo "Upload failed (asset may already exist), continuing."
+
+      - name: Update Gitee update.json
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          # Make sure we have the latest update.json from GitHub main.
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main || true
+          VERSION_NUM="$VERSION"
+          python3 - <<'PY'
+          import json, os
+          ver = os.environ["VERSION_NUM"]
+          tag = os.environ["TAG"]
+          data = {
+              "version": ver,
+              "base_url": f"https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/{tag}",
+              "release_notes": "",
+              "published_at": "",
+          }
+          with open("update.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}/contents/update.json"
+          # Get current sha (if file exists)
+          SHA=$(curl -fsS -X GET "${API}?access_token=${GITEE_TOKEN}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha',''))" 2>/dev/null || true)
+          B64=$(base64 -w0 update.json)
+          if [ -n "$SHA" ]; then
+            curl -fsS -X PUT "${API}" \
+              -H "Content-Type: application/json" \
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"content\":\"${B64}\",\"sha\":\"${SHA}\",\"message\":\"chore: update update.json to ${TAG}\",\"branch\":\"main\"}"
+          else
+            curl -fsS -X POST "${API}" \
+              -H "Content-Type: application/json" \
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"content\":\"${B64}\",\"message\":\"chore: update update.json to ${TAG}\",\"branch\":\"main\"}"
+          fi
+          echo "Gitee update.json updated to ${TAG}."
+
+      - name: Sync main (code) to Gitee
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main || true
+          git remote add gitee "https://${GITEE_OWNER}:${GITEE_TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}.git"
+          if git push gitee main:main 2>&1; then
+            echo "Pushed main to Gitee."
+          else
+            echo "Push failed (non-fast-forward); attempting force-with-lease..."
+            git push --force-with-lease gitee main:main 2>&1 || echo "Force push also failed, update.json already handled via API."
+          fi
