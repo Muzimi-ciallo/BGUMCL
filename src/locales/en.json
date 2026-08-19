@@ -1499,6 +1499,9 @@
       "author": "Author",
       "modLoader": "Mod Loader",
       "gameVersion": "Game Version"
+    },
+    "toast": {
+      "updateChannelPreset": "Modpack update link preset"
     }
   },
   "InstanceBasicSettings": {

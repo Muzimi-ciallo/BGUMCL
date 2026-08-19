@@ -1499,6 +1499,9 @@
       "author": "作者",
       "modLoader": "改囊載器",
       "gameVersion": "戲版"
+    },
+    "toast": {
+      "updateChannelPreset": "整合包更新鏈已預設"
     }
   },
   "InstanceBasicSettings": {

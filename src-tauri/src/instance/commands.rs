@@ -1273,6 +1273,14 @@ pub async fn create_instance(
     .await
     .map_err(|_| InstanceError::FileCreationFailed)?;
 
+  // Register the new instance in the in-memory state map so that subsequent
+  // commands (e.g. set_github_modpack_update_channel) can find it immediately.
+  {
+    let binding = app.state::<Mutex<HashMap<String, Instance>>>();
+    let mut state = binding.lock()?;
+    state.insert(instance.id.clone(), instance.clone());
+  }
+
   dir_guard.commit();
   Ok(())
 }
@@ -1809,4 +1817,3 @@ pub async fn export_modpack(
 
   Ok(())
 }
-

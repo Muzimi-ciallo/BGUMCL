@@ -150,6 +150,11 @@ const ImportModpackModal: React.FC<ImportModpackModalProps> = ({
                 description: res.details,
                 status: "warning",
               });
+            } else {
+              toast({
+                title: t("ImportModpackModal.toast.updateChannelPreset"),
+                status: "success",
+              });
             }
           });
         }

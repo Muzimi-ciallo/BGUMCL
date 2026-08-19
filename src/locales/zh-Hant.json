@@ -1499,6 +1499,9 @@
       "author": "作者",
       "modLoader": "模組載入器",
       "gameVersion": "遊戲版本"
+    },
+    "toast": {
+      "updateChannelPreset": "已預設整合包更新連結"
     }
   },
   "InstanceBasicSettings": {
