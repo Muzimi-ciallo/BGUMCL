@@ -1499,6 +1499,9 @@
       "author": "作者",
       "modLoader": "モッドローダー",
       "gameVersion": "ゲームバージョン"
+    },
+    "toast": {
+      "updateChannelPreset": "Modpack更新リンクをプリセットしました"
     }
   },
   "InstanceBasicSettings": {

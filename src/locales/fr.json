@@ -1499,6 +1499,9 @@
       "author": "Auteur",
       "modLoader": "Chargeur de mods",
       "gameVersion": "Version du jeu"
+    },
+    "toast": {
+      "updateChannelPreset": "Lien de mise à jour du modpack prédéfini"
     }
   },
   "InstanceBasicSettings": {
