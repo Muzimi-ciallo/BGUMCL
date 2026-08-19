@@ -101,4 +101,3 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
 };
 
 export default NotifyNewVersionModal;
-

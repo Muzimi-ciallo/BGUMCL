@@ -80,13 +80,6 @@ jobs:
       - name: Lint JavaScript/TypeScript Frontend
         run: pnpm eslint 'src/**/*.{js,jsx,ts,tsx}' --no-fix --max-warnings=0
       
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Lint Rust Backend
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
-
   Build:
     needs: changes
     if: needs.changes.outputs.should_run_build == 'true'

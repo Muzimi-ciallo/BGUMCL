@@ -243,9 +243,7 @@ const LaunchProcessModal: React.FC<LaunchProcessModalProps> = ({
               data: null,
             });
           }
-          return InstanceService.checkGithubModpackUpdate(
-            effectiveInstance.id
-          );
+          return InstanceService.checkGithubModpackUpdate(effectiveInstance.id);
         },
         isOK: (data: GithubModpackUpdateInfo | null) =>
           !data ||

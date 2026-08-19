@@ -48,10 +48,7 @@ import { useSharedModals } from "@/contexts/shared-modal";
 import { useToast } from "@/contexts/toast";
 import { ModLoaderType } from "@/enums/instance";
 import { GetStateFlag } from "@/hooks/get-state";
-import {
-  GithubModpackUpdateInfo,
-  LocalModInfo,
-} from "@/models/instance/misc";
+import { GithubModpackUpdateInfo, LocalModInfo } from "@/models/instance/misc";
 import { ScreenshotInfo } from "@/models/instance/misc";
 import { WorldInfo } from "@/models/instance/world";
 import { InstanceService } from "@/services/instance";
@@ -62,7 +59,6 @@ import {
 } from "@/utils/datetime";
 import { getInstanceIconSrc, parseModLoaderVersion } from "@/utils/instance";
 import { base64ImgSrc } from "@/utils/string";
-
 
 // All these widgets are used in InstanceContext with WarpCard wrapped.
 interface InstanceWidgetBaseProps extends Omit<BoxProps, "children"> {
@@ -720,4 +716,3 @@ export const InstanceModpackUpdateWidget = () => {
     </InstanceWidgetBase>
   );
 };
-

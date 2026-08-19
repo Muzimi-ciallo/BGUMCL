@@ -180,6 +180,7 @@ const ImportModpackModal: React.FC<ImportModpackModalProps> = ({
     modpack,
     name,
     path,
+    modpackUpdateChannel,
     router,
     toast,
   ]);

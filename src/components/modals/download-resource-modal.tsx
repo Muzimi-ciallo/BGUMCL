@@ -16,12 +16,7 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconType } from "react-icons";
-import {
-  LuHaze,
-  LuPackage,
-  LuPuzzle,
-  LuSquareLibrary,
-} from "react-icons/lu";
+import { LuHaze, LuPackage, LuPuzzle, LuSquareLibrary } from "react-icons/lu";
 import NavMenu from "@/components/common/nav-menu";
 import ResourceDownloader from "@/components/resource-downloader";
 import { useLauncherConfig } from "@/contexts/config";

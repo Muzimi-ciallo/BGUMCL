@@ -138,5 +138,3 @@ const WelcomeAndTermsModal: React.FC<Omit<ModalProps, "children">> = ({
 };
 
 export default WelcomeAndTermsModal;
-
-
