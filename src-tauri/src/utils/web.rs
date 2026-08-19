@@ -116,9 +116,51 @@ pub fn strip_gh_proxy_prefix(url: &str) -> String {
   url.to_string()
 }
 
+/// Map a GitHub account to its Gitee mirror account, for repos that are
+/// mirrored to Gitee. Unknown accounts get `None`.
+fn gitee_mirror_owner(github_owner: &str) -> Option<&'static str> {
+  match github_owner {
+    "Muzimi-ciallo" => Some("Muzimimiao"),
+    _ => None,
+  }
+}
+
+/// Convert a GitHub URL to the corresponding Gitee mirror URL, if the repo is
+/// mirrored. Handles `github.com/...` and `raw.githubusercontent.com/...`.
+pub fn github_to_gitee(url: &str) -> Option<String> {
+  if let Some(rest) = url.strip_prefix("https://raw.githubusercontent.com/") {
+    let mut parts = rest.splitn(3, '/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    let branch_path = parts.next()?;
+    let g_owner = gitee_mirror_owner(owner)?;
+    let mut bp = branch_path.splitn(2, '/');
+    let branch = bp.next().unwrap_or("main");
+    let path = bp.next().unwrap_or("");
+    return Some(format!(
+      "https://gitee.com/{}/{}/raw/{}/{}",
+      g_owner, repo, branch, path
+    ));
+  }
+  if let Some(rest) = url.strip_prefix("https://github.com/") {
+    let mut parts = rest.splitn(3, '/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    let rest_path = parts.next().unwrap_or("");
+    let g_owner = gitee_mirror_owner(owner)?;
+    return Some(format!(
+      "https://gitee.com/{}/{}/{}",
+      g_owner, repo, rest_path
+    ));
+  }
+  None
+}
+
 /// Build a list of candidate URLs to try for GitHub-related requests:
-/// accelerated mirrors first, then a direct connection. Non-GitHub URLs are
-/// returned unchanged so unrelated downloads are not routed through a proxy.
+/// v4 proxy -> Gitee mirror -> cdn proxy -> direct connection. Gitee is put
+/// early because it is reliably reachable in mainland China (e.g. Guangxi)
+/// even when GitHub and gh-proxy are blocked. Non-GitHub URLs are returned
+/// unchanged so unrelated downloads are not routed through a proxy.
 pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   let is_github =
     url.contains("github.com") || url.contains("raw.githubusercontent.com");
@@ -139,17 +181,21 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   };
   let direct = format!("https://{}", scheme_less);
   let mut out: Vec<String> = Vec::new();
-  for prefix in GH_PROXY_PREFIXES {
-    let candidate = format!("{}{}", prefix, scheme_less);
-    if !out.contains(&candidate) {
-      out.push(candidate);
+  let v4 = format!("{}{}", GH_PROXY_PREFIXES[0], scheme_less);
+  out.push(v4);
+  if let Some(gitee) = github_to_gitee(&direct) {
+    if !out.contains(&gitee) {
+      out.push(gitee);
     }
+  }
+  let cdn = format!("{}{}", GH_PROXY_PREFIXES[1], scheme_less);
+  if !out.contains(&cdn) {
+    out.push(cdn);
   }
   if !out.contains(&direct) {
     out.push(direct);
   }
-  // If the caller already used a specific mirror, keep that exact URL first;
-  // otherwise keep the mirror order (v4 -> cdn -> direct).
+  // If the caller already used a specific mirror, keep that exact URL first.
   if had_prefix {
     if let Some(pos) = out.iter().position(|c| c == url) {
       out.swap(0, pos);

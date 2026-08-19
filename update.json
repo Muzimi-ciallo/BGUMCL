@@ -1,6 +1,6 @@
 {
-  "version": "1.3.11",
-  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.11",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.3.12",
+  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.12",
+  "release_notes": "BGUMCL 1.3.12：接入 Gitee 国内镜像源——GitHub 相关下载自动尝试 v4 代理 → Gitee 镜像 → cdn 代理 → 直连，广西等无法访问 GitHub 的地区可正常更新/下载整合包。",
+  "published_at": "2026-08-19T00:00:00Z"
 }
