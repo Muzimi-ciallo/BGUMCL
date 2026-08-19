@@ -1893,7 +1893,8 @@
     "text": "Página no encontrada, redirigiendo a la página de inicio en {{seconds}} segundos..."
   },
   "NotifyNewVersionModal": {
-    "title": "Nueva versión disponible"
+    "title": "Nueva versión disponible",
+    "dontRemind": "No volver a recordar"
   },
   "OptionItemGroup": {
     "button": {

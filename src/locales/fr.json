@@ -1893,7 +1893,8 @@
     "text": "Page non trouvée, redirection dans {{seconds}} secondes"
   },
   "NotifyNewVersionModal": {
-    "title": "Nouvelle version détectée"
+    "title": "Nouvelle version détectée",
+    "dontRemind": "Ne plus me le rappeler"
   },
   "OptionItemGroup": {
     "button": {

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import DownloadSpecificResourceModal from "@/components//modals/download-specific-resource-modal";
 import AddAuthServerModal from "@/components/modals/add-auth-server-modal";
 import AlertResourceDependencyModal from "@/components/modals/alert-resource-dependency-modal";
@@ -12,6 +13,7 @@ import LaunchProcessModal from "@/components/modals/launch-process-modal";
 import NotifyNewVersionModal from "@/components/modals/notify-new-version-modal";
 import ReLoginPlayerModal from "@/components/modals/relogin-player-modal";
 import SpotlightSearchModal from "@/components/modals/spotlight-search-modal";
+import { useLauncherConfig } from "@/contexts/config";
 import { SharedModalContextProvider } from "@/contexts/shared-modal";
 import { useSharedModals } from "@/contexts/shared-modal";
 
@@ -28,7 +30,24 @@ const SharedModalsProvider: React.FC<{ children: React.ReactNode }> = ({
 const SharedModals: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { modalStates, closeSharedModal } = useSharedModals();
+  const { modalStates, closeSharedModal, openSharedModal } = useSharedModals();
+  const { config, newerVersion } = useLauncherConfig();
+  const autoNotifiedVersionRef = useRef<string | null>(null);
+
+  // Auto-show the "new version available" modal once per detected version,
+  // unless the user chose "don't remind again" for that version.
+  useEffect(() => {
+    if (
+      newerVersion.version &&
+      autoNotifiedVersionRef.current !== newerVersion.version
+    ) {
+      autoNotifiedVersionRef.current = newerVersion.version;
+      const key = `update-notify-${newerVersion.version}`;
+      if (!config.suppressedDialogs?.includes(key)) {
+        openSharedModal("notify-new-version", { newVersion: newerVersion });
+      }
+    }
+  }, [config.suppressedDialogs, newerVersion, openSharedModal]);
 
   const modals: Record<string, React.FC<any>> = {
     "add-auth-server": AddAuthServerModal,
