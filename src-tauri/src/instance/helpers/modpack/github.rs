@@ -93,8 +93,30 @@ fn build_file_url(base_url: &str, rel_path: &str) -> BGUMCLResult<url::Url> {
   url::Url::parse(&full).map_err(|e| BGUMCLError(format!("Invalid file url {}: {}", full, e)))
 }
 
+/// GitHub blob pages return HTML, but the update system needs the raw JSON.
+/// Convert `...github.com/owner/repo/blob/branch/path` to
+/// `...raw.githubusercontent.com/owner/repo/branch/path`, keeping any proxy
+/// prefix (e.g. `https://v4.gh-proxy.org/https://`) so acceleration still works.
+fn normalize_manifest_url(raw: &str) -> String {
+  const BLOB_MARKER: &str = "/blob/";
+  const HOST_MARKER: &str = "github.com/";
+  if let Some(blob_idx) = raw.find(BLOB_MARKER) {
+    if let Some(host_idx) = raw[..blob_idx].rfind(HOST_MARKER) {
+      let prefix = &raw[..host_idx];
+      let owner_repo = &raw[host_idx + HOST_MARKER.len()..blob_idx];
+      let branch_path = &raw[blob_idx + BLOB_MARKER.len()..];
+      return format!(
+        "{}raw.githubusercontent.com/{}/{}",
+        prefix, owner_repo, branch_path
+      );
+    }
+  }
+  raw.to_string()
+}
+
 async fn fetch_manifest(app: &AppHandle, manifest_url: &str) -> BGUMCLResult<GithubModpackManifest> {
-  let url = url::Url::parse(manifest_url)
+  let normalized = normalize_manifest_url(manifest_url);
+  let url = url::Url::parse(&normalized)
     .map_err(|e| BGUMCLError(format!("Invalid manifest url {}: {}", manifest_url, e)))?;
   let client = app.state::<reqwest::Client>();
   let resp = client
