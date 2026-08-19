@@ -3,6 +3,7 @@ name: Sync release to Gitee
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -71,9 +72,12 @@ jobs:
         run: |
           API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}"
           REL_ID=$(curl -fsS -X GET "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          curl -fsS -X POST "${API}/releases/${REL_ID}/attach_files" \
+          # Best-effort upload with a timeout so a slow upload never blocks the
+          # rest of the sync (update.json + code push). If it fails or times
+          # out, the asset can be uploaded manually via the Gitee web UI.
+          curl -fsS --connect-timeout 30 --max-time 900 -X POST "${API}/releases/${REL_ID}/attach_files" \
             -F "access_token=${GITEE_TOKEN}" \
-            -F "file=@${ASSET_NAME}" || echo "Upload failed (asset may already exist), continuing."
+            -F "file=@${ASSET_NAME}" || echo "Upload failed or timed out (asset may already exist), continuing."
 
       - name: Update Gitee update.json
         shell: bash
