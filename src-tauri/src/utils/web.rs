@@ -157,10 +157,11 @@ pub fn github_to_gitee(url: &str) -> Option<String> {
 }
 
 /// Build a list of candidate URLs to try for GitHub-related requests:
-/// v4 proxy -> Gitee mirror -> cdn proxy -> direct connection. Gitee is put
-/// early because it is reliably reachable in mainland China (e.g. Guangxi)
-/// even when GitHub and gh-proxy are blocked. Non-GitHub URLs are returned
-/// unchanged so unrelated downloads are not routed through a proxy.
+/// Gitee mirror -> v4 proxy -> cdn proxy -> direct connection. Gitee is the
+/// FIRST priority because it is the fastest and most reliable in mainland
+/// China (no proxy needed), and its content is kept in sync by the release
+/// workflows. Non-GitHub URLs are returned unchanged so unrelated downloads
+/// are not routed through a proxy.
 pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   let is_github =
     url.contains("github.com") || url.contains("raw.githubusercontent.com");
@@ -181,12 +182,13 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   };
   let direct = format!("https://{}", scheme_less);
   let mut out: Vec<String> = Vec::new();
-  let v4 = format!("{}{}", GH_PROXY_PREFIXES[0], scheme_less);
-  out.push(v4);
+  // Gitee mirror first.
   if let Some(gitee) = github_to_gitee(&direct) {
-    if !out.contains(&gitee) {
-      out.push(gitee);
-    }
+    out.push(gitee);
+  }
+  let v4 = format!("{}{}", GH_PROXY_PREFIXES[0], scheme_less);
+  if !out.contains(&v4) {
+    out.push(v4);
   }
   let cdn = format!("{}{}", GH_PROXY_PREFIXES[1], scheme_less);
   if !out.contains(&cdn) {
@@ -194,12 +196,6 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   }
   if !out.contains(&direct) {
     out.push(direct);
-  }
-  // If the caller already used a specific mirror, keep that exact URL first.
-  if had_prefix {
-    if let Some(pos) = out.iter().position(|c| c == url) {
-      out.swap(0, pos);
-    }
   }
   out
 }
