@@ -1701,30 +1701,50 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       break;
     }
   }
-  let json = json.ok_or(InstanceError::NetworkError)?;
 
-  let asset = json
-    .get("assets")
-    .and_then(|v| v.as_array())
-    .and_then(|assets| {
-      assets.iter().find(|a| {
-        a.get("name")
-          .and_then(|n| n.as_str())
-          .map(|n| n.ends_with(".mrpack"))
-          .unwrap_or(false)
+  // Decide which file to download. Prefer the latest GitHub release asset;
+  // if the GitHub API is unreachable (e.g. some regions of China), fall back
+  // to the mrpack mirrored as a raw file in the Gitee repo.
+  let (name, candidates): (String, Vec<String>) = if let Some(json) = json {
+    let asset = json
+      .get("assets")
+      .and_then(|v| v.as_array())
+      .and_then(|assets| {
+        assets.iter().find(|a| {
+          a.get("name")
+            .and_then(|n| n.as_str())
+            .map(|n| n.ends_with(".mrpack"))
+            .unwrap_or(false)
+        })
       })
-    })
-    .ok_or(InstanceError::NetworkError)?;
-
-  let name = asset
-    .get("name")
-    .and_then(|n| n.as_str())
-    .unwrap_or("wanda-server-modpack.mrpack")
-    .to_string();
-  let url = asset
-    .get("browser_download_url")
-    .and_then(|u| u.as_str())
-    .ok_or(InstanceError::NetworkError)?;
+      .ok_or(InstanceError::NetworkError)?;
+    let name = asset
+      .get("name")
+      .and_then(|n| n.as_str())
+      .unwrap_or("wanda-server-modpack.mrpack")
+      .to_string();
+    let url = asset
+      .get("browser_download_url")
+      .and_then(|u| u.as_str())
+      .ok_or(InstanceError::NetworkError)?;
+    let mut candidates = crate::utils::web::gh_proxy_candidates(&url);
+    let gitee_raw = format!(
+      "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/mrpack/{}",
+      name
+    );
+    if !candidates.contains(&gitee_raw) {
+      candidates.push(gitee_raw);
+    }
+    (name, candidates)
+  } else {
+    // GitHub API unreachable: use the mrpack mirrored on Gitee raw.
+    let name = "Fabulously.Optimized-v6.5.0.mrpack".to_string();
+    let candidates = vec![format!(
+      "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/mrpack/{}",
+      name
+    )];
+    (name, candidates)
+  };
 
   let dest_dir = app
     .path()
@@ -1732,9 +1752,6 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     .map_err(|_| InstanceError::NetworkError)?;
   fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
   let dest = dest_dir.join(&name);
-
-  // Download the modpack file: accelerated mirrors first, then direct GitHub.
-  let candidates = crate::utils::web::gh_proxy_candidates(&url);
   let mut downloaded = false;
   for candidate in &candidates {
     let Ok(resp) = client.get(candidate).send().await else {
