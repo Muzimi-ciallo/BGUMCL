@@ -1704,7 +1704,8 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
 
   // Decide which file to download. Prefer the latest GitHub release asset;
   // if the GitHub API is unreachable (e.g. some regions of China), fall back
-  // to the mrpack mirrored as a raw file in the Gitee repo.
+  // to the mrpack hosted on the Gitee release (Gitee repo files are limited to
+  // 50 MB, so the modpack is distributed as a Gitee release attachment).
   let (name, candidates): (String, Vec<String>) = if let Some(json) = json {
     let asset = json
       .get("assets")
@@ -1727,20 +1728,15 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       .get("browser_download_url")
       .and_then(|u| u.as_str())
       .ok_or(InstanceError::NetworkError)?;
-    let mut candidates = crate::utils::web::gh_proxy_candidates(&url);
-    let gitee_raw = format!(
-      "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/mrpack/{}",
-      name
-    );
-    if !candidates.contains(&gitee_raw) {
-      candidates.push(gitee_raw);
-    }
+    // gh_proxy_candidates already adds the Gitee release mirror for GitHub
+    // release download URLs, so both GitHub (v4/cdn/direct) and Gitee are tried.
+    let candidates = crate::utils::web::gh_proxy_candidates(&url);
     (name, candidates)
   } else {
-    // GitHub API unreachable: use the mrpack mirrored on Gitee raw.
+    // GitHub API unreachable: use the known mrpack on the Gitee release.
     let name = "Fabulously.Optimized-v6.5.0.mrpack".to_string();
     let candidates = vec![format!(
-      "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/mrpack/{}",
+      "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/releases/download/1.0.0/{}",
       name
     )];
     (name, candidates)
