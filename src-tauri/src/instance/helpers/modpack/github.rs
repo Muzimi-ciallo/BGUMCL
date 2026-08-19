@@ -114,19 +114,30 @@ fn normalize_manifest_url(raw: &str) -> String {
   raw.to_string()
 }
 
-async fn fetch_manifest(app: &AppHandle, manifest_url: &str) -> BGUMCLResult<GithubModpackManifest> {
+async fn fetch_manifest(_app: &AppHandle, manifest_url: &str) -> BGUMCLResult<GithubModpackManifest> {
   let normalized = normalize_manifest_url(manifest_url);
-  let url = url::Url::parse(&normalized)
-    .map_err(|e| BGUMCLError(format!("Invalid manifest url {}: {}", manifest_url, e)))?;
-  let client = app.state::<reqwest::Client>();
-  let resp = client
-    .get(url)
-    .send()
-    .await
-    .map_err(|e| BGUMCLError(format!("Failed to fetch modpack manifest: {:?}", e)))?;
-  let resp = resp
-    .error_for_status()
-    .map_err(|e| BGUMCLError(format!("Failed to fetch modpack manifest: {:?}", e)))?;
+  // Try accelerated mirrors first (v4 -> cdn), then a direct connection, so
+  // modpack updates still work in regions where one proxy is unreachable.
+  let candidates = crate::utils::web::gh_proxy_candidates(&normalized);
+  let client = crate::tasks::download::download_client().clone();
+  let mut last_err: Option<String> = None;
+  let mut resp: Option<reqwest::Response> = None;
+  for candidate in &candidates {
+    match client.get(candidate).send().await {
+      Ok(r) if r.status().is_success() => {
+        resp = Some(r);
+        break;
+      }
+      Ok(r) => last_err = Some(format!("HTTP {}", r.status())),
+      Err(e) => last_err = Some(format!("{:?}", e)),
+    }
+  }
+  let resp = resp.ok_or_else(|| {
+    BGUMCLError(format!(
+      "Failed to fetch modpack manifest: {}",
+      last_err.unwrap_or_else(|| "unknown error".to_string())
+    ))
+  })?;
   let manifest: GithubModpackManifest = resp
     .json()
     .await

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.10",
-  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.10",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.3.11",
+  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.11",
+  "release_notes": "BGUMCL 1.3.11：网络自动降级——v4.gh-proxy.org 不可用时自动改用 cdn.gh-proxy.org 或直连，解决部分地区（如广西）无法更新客户端/整合包的问题。",
+  "published_at": "2026-08-19T00:00:00Z"
 }

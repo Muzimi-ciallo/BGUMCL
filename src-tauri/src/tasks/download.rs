@@ -148,30 +148,36 @@ impl DownloadTask {
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
     let client = with_retry(download_client().clone());
-    let mut request = if current == 0 {
-      client.get(param.src.clone())
-    } else {
-      client
-        .get(param.src.clone())
-        .header(RANGE, format!("bytes={current}-"))
-    };
+    // Try accelerated mirrors first (v4 -> cdn), then direct connection, so
+    // downloads still work when one proxy is unreachable in some regions.
+    let candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
+    let mut last_err: Option<String> = None;
+    for candidate in &candidates {
+      let url = url::Url::parse(candidate)
+        .map_err(|e| BGUMCLError(format!("Invalid url {}: {}", candidate, e)))?;
+      let mut request = if current == 0 {
+        client.get(url)
+      } else {
+        client.get(url).header(RANGE, format!("bytes={current}-"))
+      };
 
-    // add api key header for CurseForge download urls (#1679)
-    // ref: https://blog.curseforge.com/introducing-api-key-authentication-for-curseforge-file-downloads
-    if is_curseforge_authenticated_url(&param.src) {
-      request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
+      // add api key header for CurseForge download urls (#1679)
+      // ref: https://blog.curseforge.com/introducing-api-key-authentication-for-curseforge-file-downloads
+      if is_curseforge_authenticated_url(&param.src) {
+        request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
+      }
+
+      match request.send().await {
+        Ok(resp) => match resp.error_for_status() {
+          Ok(resp) => return Ok(resp),
+          Err(e) => last_err = Some(format!("{:?}", e.source())),
+        },
+        Err(e) => last_err = Some(format!("{:?}", e.source())),
+      }
     }
-
-    let response = request
-      .send()
-      .await
-      .map_err(|e| BGUMCLError(format!("{:?}", e.source())))?;
-
-    let response = response
-      .error_for_status()
-      .map_err(|e| BGUMCLError(format!("{:?}", e.source())))?;
-
-    Ok(response)
+    Err(BGUMCLError(last_err.unwrap_or_else(|| {
+      "Download request failed".to_string()
+    })))
   }
 
   async fn create_resp_stream(

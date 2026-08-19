@@ -1678,19 +1678,18 @@ pub async fn retrieve_modpack_meta_info(
 
 #[tauri::command]
 pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
-  // Try the accelerated proxy first, then fall back to the direct GitHub API
-  // in case the proxy is unreachable or throttling on this machine.
-  const API_URLS: [&str; 2] = [
-    "https://v4.gh-proxy.org/https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
-    "https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
-  ];
-
   // Use the dedicated download client (browser User-Agent + long timeout) so
   // proxies do not throttle us and large files are not cut off.
   let client = crate::tasks::download::download_client().clone();
 
+  // Try accelerated mirrors (v4 -> cdn) then the direct GitHub API, so this
+  // works even in regions where one proxy is unreachable.
+  let api_candidates = crate::utils::web::gh_proxy_candidates(
+    "https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
+  );
+
   let mut json: Option<serde_json::Value> = None;
-  for api_url in API_URLS {
+  for api_url in &api_candidates {
     let Ok(resp) = client.get(api_url).send().await else {
       continue;
     };
@@ -1734,11 +1733,8 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
   fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
   let dest = dest_dir.join(&name);
 
-  // Download the modpack file: proxy first, then direct GitHub.
-  let candidates = [
-    format!("https://v4.gh-proxy.org/{}", url),
-    url.to_string(),
-  ];
+  // Download the modpack file: accelerated mirrors first, then direct GitHub.
+  let candidates = crate::utils::web::gh_proxy_candidates(&url);
   let mut downloaded = false;
   for candidate in &candidates {
     let Ok(resp) = client.get(candidate).send().await else {

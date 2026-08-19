@@ -96,6 +96,68 @@ pub fn with_retry(client: Client) -> ClientWithMiddleware {
     .build()
 }
 
+/// gh-proxy acceleration prefixes, tried in order. If the first one is
+/// unreachable (e.g. v4.gh-proxy.org is blocked in some regions), the next
+/// mirror (cdn.gh-proxy.org) or a direct connection is used automatically.
+pub const GH_PROXY_PREFIXES: [&str; 2] = [
+  "https://v4.gh-proxy.org/https://",
+  "https://cdn.gh-proxy.org/https://",
+];
+
+/// Strip any known gh-proxy prefix, returning the remainder (scheme-less
+/// GitHub path such as `github.com/owner/repo/...`). URLs without a known
+/// prefix are returned unchanged.
+pub fn strip_gh_proxy_prefix(url: &str) -> String {
+  for prefix in GH_PROXY_PREFIXES {
+    if let Some(rest) = url.strip_prefix(prefix) {
+      return rest.to_string();
+    }
+  }
+  url.to_string()
+}
+
+/// Build a list of candidate URLs to try for GitHub-related requests:
+/// accelerated mirrors first, then a direct connection. Non-GitHub URLs are
+/// returned unchanged so unrelated downloads are not routed through a proxy.
+pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
+  let is_github =
+    url.contains("github.com") || url.contains("raw.githubusercontent.com");
+  if !is_github {
+    return vec![url.to_string()];
+  }
+  let stripped = strip_gh_proxy_prefix(url);
+  let had_prefix = stripped != url;
+  // Scheme-less GitHub path, e.g. `github.com/owner/repo/...`, which mirrors
+  // expect right after `https://v4.gh-proxy.org/https://`.
+  let scheme_less = if had_prefix {
+    stripped
+  } else {
+    url.strip_prefix("https://")
+      .or_else(|| url.strip_prefix("http://"))
+      .unwrap_or(url)
+      .to_string()
+  };
+  let direct = format!("https://{}", scheme_less);
+  let mut out: Vec<String> = Vec::new();
+  for prefix in GH_PROXY_PREFIXES {
+    let candidate = format!("{}{}", prefix, scheme_less);
+    if !out.contains(&candidate) {
+      out.push(candidate);
+    }
+  }
+  if !out.contains(&direct) {
+    out.push(direct);
+  }
+  // If the caller already used a specific mirror, keep that exact URL first;
+  // otherwise keep the mirror order (v4 -> cdn -> direct).
+  if had_prefix {
+    if let Some(pos) = out.iter().position(|c| c == url) {
+      out.swap(0, pos);
+    }
+  }
+  out
+}
+
 /// Check whether the current IP is located in mainland China.
 ///
 /// This function queries two Cloudflare trace endpoints in parallel.
