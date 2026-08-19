@@ -57,16 +57,22 @@ pub async fn fetch_latest_version(
   };
   let client = app.state::<reqwest::Client>();
 
+  // Try accelerated mirrors first (v4 -> cdn), then a direct connection, so
+  // update checks still work in regions where one proxy is unreachable.
+  let manifest_candidates = crate::utils::web::gh_proxy_candidates(MANIFEST_URL);
   let mut j: Option<Value> = None;
   for attempt in 0..3u32 {
-    match client.get(MANIFEST_URL).send().await {
-      Ok(resp) if resp.status().is_success() => {
-        if let Ok(parsed) = resp.json::<Value>().await {
-          j = Some(parsed);
-          break;
-        }
+    for manifest_url in &manifest_candidates {
+      if let Ok(resp) = client.get(manifest_url).send().await
+        && resp.status().is_success()
+        && let Ok(parsed) = resp.json::<Value>().await
+      {
+        j = Some(parsed);
+        break;
       }
-      _ => {}
+    }
+    if j.is_some() {
+      break;
     }
     if attempt < 2 {
       tokio::time::sleep(std::time::Duration::from_millis(600)).await;
