@@ -1,6 +1,6 @@
 {
   "version": "1.3.13",
   "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.13",
-  "release_notes": "BGUMCL 1.3.13：修复取消实例下载后无法重试同名实例的问题；更新提示弹窗新增“不再提醒”；点星弹窗指向本仓库。",
-  "published_at": "2026-08-20T00:00:00Z"
+  "release_notes": "",
+  "published_at": ""
 }
