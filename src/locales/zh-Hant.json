@@ -1893,7 +1893,8 @@
     "text": "頁面不存在，即將在 {{seconds}} 秒後跳轉"
   },
   "NotifyNewVersionModal": {
-    "title": "發現新版本"
+    "title": "發現新版本",
+    "dontRemind": "不再提醒"
   },
   "OptionItemGroup": {
     "button": {

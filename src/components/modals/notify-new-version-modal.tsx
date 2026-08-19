@@ -30,7 +30,7 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
   const toast = useToast();
   const router = useRouter();
   const { t } = useTranslation();
-  const { config, isZh } = useLauncherConfig();
+  const { config, isZh, update } = useLauncherConfig();
   const primaryColor = config.appearance.theme.primaryColor;
 
   const isLinux = config.basicInfo.osType === "linux"; // for Linux, navigate to the website.
@@ -51,6 +51,15 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
           router.push("/downloads");
         }
       });
+    }
+    props.onClose();
+  };
+
+  const handleDontRemind = () => {
+    const key = `update-notify-${newVersion.version}`;
+    const list = config.suppressedDialogs || [];
+    if (!list.includes(key)) {
+      update("suppressedDialogs", [...list, key]);
     }
     props.onClose();
   };
@@ -83,6 +92,9 @@ const NotifyNewVersionModal: React.FC<NotifyNewVersionModalProps> = ({
           </MarkdownContainer>
         </ModalBody>
         <ModalFooter>
+          <Button variant="ghost" onClick={handleDontRemind}>
+            {t("NotifyNewVersionModal.dontRemind")}
+          </Button>
           <Button variant="ghost" onClick={props.onClose}>
             {t("General.cancel")}
           </Button>

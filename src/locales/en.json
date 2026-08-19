@@ -1896,7 +1896,8 @@
     "text": "Page not found, redirecting to launch page in {{seconds}} seconds..."
   },
   "NotifyNewVersionModal": {
-    "title": "New Version Available"
+    "title": "New Version Available",
+    "dontRemind": "Don't remind me again"
   },
   "OptionItemGroup": {
     "button": {

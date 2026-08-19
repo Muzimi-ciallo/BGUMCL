@@ -1893,7 +1893,8 @@
     "text": "頁無，即將在 {{seconds}} 秒後跳轉"
   },
   "NotifyNewVersionModal": {
-    "title": "發見新版"
+    "title": "發見新版",
+    "dontRemind": "勿復提醒"
   },
   "OptionItemGroup": {
     "button": {

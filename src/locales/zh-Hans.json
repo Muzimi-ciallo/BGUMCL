@@ -1896,7 +1896,8 @@
     "text": "页面不存在，即将在 {{seconds}} 秒后跳转"
   },
   "NotifyNewVersionModal": {
-    "title": "发现新版本"
+    "title": "发现新版本",
+    "dontRemind": "不再提醒"
   },
   "OptionItemGroup": {
     "button": {

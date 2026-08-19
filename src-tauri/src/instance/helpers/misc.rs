@@ -31,6 +31,36 @@ pub fn get_instance_game_config(app: &AppHandle, instance: &Instance) -> GameCon
   get_global_game_config(app)
 }
 
+/// Remove leftover instance directories created by a cancelled
+/// `game-client`/`game-client-w-java` download task, so the same instance name
+/// can be created again (fixes "the directory already contains an instance
+/// with the same name" after cancelling a download).
+pub fn cleanup_cancelled_instance_creation(app: &AppHandle, task_group: &str) {
+  let base = task_group.split('@').next().unwrap_or(task_group);
+  let name = if let Some(n) = base.strip_prefix("game-client-w-java?") {
+    n.split('&').next().map(|s| s.to_string())
+  } else if let Some(n) = base.strip_prefix("game-client?") {
+    Some(n.to_string())
+  } else {
+    None
+  };
+  let Some(name) = name else { return };
+  let binding = app.state::<Mutex<LauncherConfig>>();
+  let Ok(config_binding) = binding.lock() else {
+    return;
+  };
+  for directory in &config_binding.local_game_directories {
+    let version_path = directory.dir.join("versions").join(&name);
+    if version_path.exists() {
+      let _ = fs::remove_dir_all(&version_path);
+      log::info!(
+        "Removed incomplete instance directory after cancelled creation: {:?}",
+        version_path
+      );
+    }
+  }
+}
+
 pub fn get_instance_subdir_paths(
   app: &AppHandle,
   instance: &Instance,
