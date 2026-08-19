@@ -1,6 +1,6 @@
 {
   "version": "1.3.14",
   "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.14",
-  "release_notes": "BGUMCL 1.3.14：湾大整合包改由 Gitee Release 分发（不受 50MB 仓库文件限制），一键下载在 GitHub 不可用时自动走 Gitee Release。",
-  "published_at": "2026-08-20T00:00:00Z"
+  "release_notes": "",
+  "published_at": ""
 }
