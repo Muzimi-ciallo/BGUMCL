@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to sync, e.g. v1.3.14"
+        required: true
 
 permissions:
   contents: read
@@ -24,7 +28,7 @@ jobs:
         id: meta
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.inputs.release_tag || github.event.release.tag_name }}"
           VERSION="${TAG#v}"
           ASSET_NAME="BGUMCL_${VERSION}_windows_x86_64_portable.exe"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
