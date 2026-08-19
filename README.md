@@ -15,10 +15,8 @@
 
 
 
-## 感谢
-
-
+## 特别感谢
 
 非常感谢SJMC的开源项目与启发！！！https://github.com/SJMC-Dev/awesome-SJMCL-extensions.git
 
-
+感谢蓝色吃白饭大肥鱼的协作，虽然你涨价了，但我还是爱你。
