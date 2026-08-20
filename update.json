@@ -1,6 +1,6 @@
 {
-  "version": "1.3.17",
-  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.17",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.3.18",
+  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.18",
+  "release_notes": "BGUMCL 1.3.18：下载任务支持使用设置中的代理，解决 CurseForge/Modrinth CDN 在国内部分 mod 下载失败的问题。",
+  "published_at": "2026-08-20T00:00:00Z"
 }

@@ -6,7 +6,7 @@ use sjmcl_types::error::{BGUMCLError, BGUMCLResult};
 use std::error::Error;
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_http::reqwest;
@@ -16,6 +16,7 @@ use tokio_util::bytes;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 use crate::launcher_config::commands::retrieve_launcher_config;
+use crate::launcher_config::models::{LauncherConfig, ProxyType};
 use crate::resource::helpers::curseforge::misc::{
   CURSEFORGE_API_KEY, is_curseforge_authenticated_url,
 };
@@ -43,6 +44,28 @@ pub(crate) fn download_client() -> &'static reqwest::Client {
       .build()
       .unwrap_or_else(|_| reqwest::Client::new())
   })
+}
+
+/// Build a download client that honors the user-configured proxy, so files
+/// from CurseForge / Modrinth CDNs can be downloaded in regions where they are
+/// blocked or slow without a proxy.
+fn build_download_client_with_proxy(
+  proxy_cfg: &crate::launcher_config::models::ProxyConfig,
+) -> reqwest::Client {
+  let mut builder = reqwest::Client::builder()
+    .timeout(Duration::from_secs(600))
+    .tcp_keepalive(Duration::from_secs(30))
+    .user_agent(DOWNLOAD_USER_AGENT);
+  if proxy_cfg.enabled {
+    let proxy_url = match proxy_cfg.selected_type {
+      ProxyType::Http => format!("http://{}:{}", proxy_cfg.host, proxy_cfg.port),
+      ProxyType::Socks => format!("socks5h://{}:{}", proxy_cfg.host, proxy_cfg.port),
+    };
+    if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+      builder = builder.proxy(proxy);
+    }
+  }
+  builder.build().unwrap_or_else(|_| reqwest::Client::new())
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -143,11 +166,21 @@ impl DownloadTask {
   }
 
   async fn send_request(
-    _app_handle: &AppHandle,
+    app_handle: &AppHandle,
     current: i64,
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
-    let client = with_retry(download_client().clone());
+    // Honor the user-configured proxy for downloads (e.g. to reach CurseForge /
+    // Modrinth CDNs from regions where they are blocked or slow).
+    let client = if let Ok(config_binding) = app_handle.state::<Mutex<LauncherConfig>>().lock() {
+      if config_binding.download.proxy.enabled {
+        with_retry(build_download_client_with_proxy(&config_binding.download.proxy))
+      } else {
+        with_retry(download_client().clone())
+      }
+    } else {
+      with_retry(download_client().clone())
+    };
     // Try accelerated mirrors first (v4 -> cdn), then direct connection, so
     // downloads still work when one proxy is unreachable in some regions.
     let candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
