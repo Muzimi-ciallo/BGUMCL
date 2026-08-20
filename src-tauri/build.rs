@@ -1,12 +1,49 @@
 use dotenvy::{dotenv_override, from_filename};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+/// Read `KEY = "value"` style lines from a .env file and set BGUMCL_* env
+/// vars (overriding any existing value). This is more robust than dotenvy for
+/// values containing special characters like `$` (e.g. the CurseForge API key),
+/// which can get mangled when passed through the shell / process environment.
+fn load_env_file(path: &Path) {
+  if let Ok(content) = fs::read_to_string(path) {
+    for line in content.lines() {
+      let line = line.trim();
+      if line.is_empty() || line.starts_with('#') {
+        continue;
+      }
+      let Some(eq) = line.find('=') else { continue };
+      let key = line[..eq].trim().to_string();
+      let mut value = line[eq + 1..].trim().to_string();
+      if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+        value = value[1..value.len() - 1].to_string();
+      }
+      if key.starts_with("BGUMCL_") && !value.is_empty() {
+        // std::env::set_var is `unsafe` on edition 2024 / newer Rust.
+        unsafe { env::set_var(&key, &value); }
+      }
+    }
+  }
+}
 
 fn main() {
   if std::env::var("GITHUB_ACTIONS").is_err() {
-    // Load env variables from ".env" file, if not exists, use ".env.template" to set default value.
+    // Load env variables from ".env" files. Cargo runs build scripts with cwd
+    // set to the crate directory (src-tauri), but the files may also live at
+    // the repository root, so try both locations.
     from_filename(".env.template").ok();
     dotenv_override().ok();
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+    let candidates = [
+      Path::new(&manifest_dir).join(".env"),
+      Path::new(&manifest_dir).join(".env.template"),
+      PathBuf::from(".env"),
+      PathBuf::from(".env.template"),
+    ];
+    for candidate in candidates {
+      load_env_file(&candidate);
+    }
   }
 
   let out_dir = env::var("OUT_DIR").unwrap_or_else(|_| "".to_string());

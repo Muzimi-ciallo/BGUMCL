@@ -1,6 +1,6 @@
 {
-  "version": "1.3.16",
-  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.16",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.3.17",
+  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.17",
+  "release_notes": "BGUMCL 1.3.17：内置 CurseForge API key，发现页/资源下载的 CurseForge 源恢复正常。",
+  "published_at": "2026-08-20T00:00:00Z"
 }
