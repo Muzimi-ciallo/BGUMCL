@@ -316,14 +316,9 @@ const ResourceDownloader: React.FC<ResourceDownloaderProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
   const [gameVersion, setGameVersion] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("All");
-  const defaultDownloadSource =
-    initialDownloadSource !== OtherResourceSource.CurseForge
-      ? initialDownloadSource
-      : (downloadSourceLists[resourceType] || []).includes(
-            OtherResourceSource.Modrinth
-          )
-        ? OtherResourceSource.Modrinth
-        : OtherResourceSource.CurseForge;
+  // Default to CurseForge (preferred source). Users can switch to Modrinth
+  // manually when a resource is not available on CurseForge.
+  const defaultDownloadSource = initialDownloadSource;
   const [sortBy, setSortBy] = useState<string>(
     defaultDownloadSource === OtherResourceSource.CurseForge
       ? "Popularity"

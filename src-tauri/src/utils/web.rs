@@ -200,6 +200,45 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   out
 }
 
+/// Map a CurseForge / Modrinth URL to its MCIM mirror
+/// (https://mod.mcimirror.top). MCIM mirrors the official Modrinth /
+/// CurseForge API and CDNs on fast mainland-China servers, which makes
+/// browsing and file downloads much faster in regions where the official
+/// CDNs are slow or blocked.
+///
+/// Mirrors the official mapping documented by MCIM:
+///   api.modrinth.com        -> mod.mcimirror.top/modrinth
+///   cdn.modrinth.com        -> mod.mcimirror.top
+///   api.curseforge.com      -> mod.mcimirror.top/curseforge
+///   edge.forgecdn.net       -> mod.mcimirror.top
+///   mediafilez.forgecdn.net -> mod.mcimirror.top
+///
+/// Returns None for URLs that are not mirrored, so callers can fall back to
+/// the original URL unchanged.
+pub fn mcim_mirror_url(url: &str) -> Option<String> {
+  let parsed = Url::parse(url).ok()?;
+  let host = parsed.host_str()?;
+  let path = parsed.path();
+  let query = parsed.query();
+
+  // Keep the path for pure CDN host swaps; add a prefix for the API hosts.
+  let new_path = match host {
+    "cdn.modrinth.com" | "edge.forgecdn.net" | "mediafilez.forgecdn.net" => {
+      path.to_string()
+    }
+    "api.modrinth.com" => format!("/modrinth{}", path),
+    "api.curseforge.com" => format!("/curseforge{}", path),
+    _ => return None,
+  };
+
+  let mut mirror = Url::parse(&format!("https://mod.mcimirror.top{}", new_path))
+    .ok()?;
+  if let Some(q) = query {
+    mirror.set_query(Some(q));
+  }
+  Some(mirror.to_string())
+}
+
 /// Check whether the current IP is located in mainland China.
 ///
 /// This function queries two Cloudflare trace endpoints in parallel.
