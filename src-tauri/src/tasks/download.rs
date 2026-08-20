@@ -189,26 +189,52 @@ impl DownloadTask {
     current: i64,
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
+    let is_cf_mr = is_curseforge_or_modrinth_url(&param.src);
     // Use the user-configured proxy ONLY for CurseForge / Modrinth CDNs;
     // all other downloads (GitHub / Gitee / Mojang, etc.) keep the direct or
     // mirrored path (no proxy) so they are not broken by a proxy that only
     // accelerates Minecraft resource sites (e.g. mcimirror.top).
-    let client = if let Ok(config_binding) = app_handle.state::<Mutex<LauncherConfig>>().lock() {
-      if config_binding.download.proxy.enabled
-        && is_curseforge_or_modrinth_url(&param.src)
-      {
-        with_retry(build_download_client_with_proxy(&config_binding.download.proxy))
+    //
+    // For CurseForge / Modrinth we use a plain client (no 1h retry wrapper)
+    // so the short per-candidate timeout and the MCIM mirror fallback below
+    // actually take effect quickly when the official CDN is blocked or slow
+    // in mainland China.
+    let client = if is_cf_mr {
+      let plain = if let Ok(config_binding) = app_handle.state::<Mutex<LauncherConfig>>().lock() {
+        if config_binding.download.proxy.enabled {
+          build_download_client_with_proxy(&config_binding.download.proxy)
+        } else {
+          download_client().clone()
+        }
       } else {
-        with_retry(download_client().clone())
-      }
+        download_client().clone()
+      };
+      // No 1h retry middleware here: the short per-candidate timeout and the
+      // MCIM mirror fallback below are what make these downloads fast in
+      // mainland China, and retrying a blocked official CDN would only delay
+      // the fallback to the mirror.
+      reqwest_middleware::ClientBuilder::new(plain).build()
     } else {
       with_retry(download_client().clone())
     };
-    // Try accelerated mirrors first (v4 -> cdn), then direct connection, so
-    // downloads still work when one proxy is unreachable in some regions.
-    let candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
+
+    // Build the list of candidate URLs to try, in order.
+    let mut candidates: Vec<String> = Vec::new();
+    if is_cf_mr {
+      // Original CDN URL first (honors the user-configured proxy when one is
+      // set), then the MCIM mirror (mod.mcimirror.top) as a fast mainland
+      // China fallback for the official Modrinth / CurseForge CDNs.
+      candidates.push(param.src.as_str().to_string());
+      if let Some(mirror) = crate::utils::web::mcim_mirror_url(param.src.as_str()) {
+        candidates.push(mirror);
+      }
+    } else {
+      // GitHub-related downloads: Gitee mirror -> gh-proxy v4 -> cdn -> direct.
+      candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
+    }
+
     let mut last_err: Option<String> = None;
-    for candidate in &candidates {
+    for (index, candidate) in candidates.iter().enumerate() {
       let url = url::Url::parse(candidate)
         .map_err(|e| BGUMCLError(format!("Invalid url {}: {}", candidate, e)))?;
       let mut request = if current == 0 {
@@ -223,9 +249,20 @@ impl DownloadTask {
         request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
       }
 
+      // The official CurseForge / Modrinth CDN can hang or be extremely slow
+      // in mainland China. Give the first (official) attempt a short timeout
+      // so we quickly fall through to the MCIM mirror instead of blocking the
+      // whole download for the 10-minute client timeout.
+      if is_cf_mr && index == 0 {
+        request = request.timeout(Duration::from_secs(15));
+      }
+
       match request.send().await {
         Ok(resp) => match resp.error_for_status() {
-          Ok(resp) => return Ok(resp),
+          Ok(resp) => {
+            log::info!("Download using candidate: {}", candidate);
+            return Ok(resp);
+          }
           Err(e) => last_err = Some(format!("{:?}", e.source())),
         },
         Err(e) => last_err = Some(format!("{:?}", e.source())),
