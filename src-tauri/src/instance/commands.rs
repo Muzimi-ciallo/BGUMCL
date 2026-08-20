@@ -1062,10 +1062,24 @@ pub async fn create_instance(
     )
   };
 
-  // Ensure the instance name is unique
+  // Ensure the instance name is unique. A directory can be left behind when an
+  // instance download was interrupted (launcher closed mid-download, task
+  // cancelled, etc.). Only treat it as a real conflict if it is a completed,
+  // valid instance (has both `name.jar` and `name.json`); otherwise remove the
+  // stale partial directory so the same name can be created again.
   let version_path = directory.dir.join("versions").join(&name);
   if version_path.exists() {
-    return Err(InstanceError::ConflictNameError.into());
+    let jar_path = version_path.join(format!("{}.jar", name));
+    let json_path = version_path.join(format!("{}.json", name));
+    if jar_path.exists() && json_path.exists() {
+      return Err(InstanceError::ConflictNameError.into());
+    }
+    log::info!(
+      "Removing leftover incomplete instance directory before re-creation: {:?}",
+      version_path
+    );
+    fs::remove_dir_all(&version_path)
+      .map_err(|_| InstanceError::FolderCreationFailed)?;
   }
 
   // Guard removes version_path on any early return (errors), fix #1105 #1310

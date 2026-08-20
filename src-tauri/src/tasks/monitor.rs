@@ -76,15 +76,19 @@ impl TaskMonitor {
       .cache
       .directory;
 
-    for entry in glob(&format!(
-      "{}/descriptors/task_*.json",
-      cache_dir.to_str().unwrap()
-    ))
-    .unwrap()
-    {
+    // Task descriptors are written by DownloadTask as `task-{id}.json` in the
+    // cache directory. Only resume tasks that were still waiting / running /
+    // stopped when the launcher closed; skip tasks that already finished.
+    for entry in glob(&format!("{}/task-*.json", cache_dir.to_str().unwrap())).unwrap() {
       if let Ok(task) = entry {
         match PTaskDesc::load(&task.clone()) {
           Ok(desc) => {
+            if matches!(
+              desc.status,
+              PStatus::Completed | PStatus::Cancelled | PStatus::Failed
+            ) {
+              continue;
+            }
             let task_id = desc.task_id;
             let task_group = desc.task_group.clone();
             match desc.payload {
