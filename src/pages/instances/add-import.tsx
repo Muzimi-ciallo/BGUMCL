@@ -43,7 +43,7 @@ const AddAndImportInstancePage = () => {
         openSharedModal("import-modpack", {
           path: res.data,
           modpackUpdateChannel:
-            "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BBGU-Minecraft-sever/blob/main/sjmcl-update.json",
+            "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/sjmcl-update.json",
         });
       } else {
         toast({

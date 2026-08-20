@@ -187,9 +187,15 @@ impl DownloadTask {
   ) -> BGUMCLResult<(
     impl Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + use<>,
     i64,
+    bool,
   )> {
     let resp = Self::send_request(app_handle, current, param).await?;
-    let total_progress = if current == 0 {
+    // If we asked for a range (current > 0) but the server replied with the
+    // full 200 OK body instead of 206 Partial Content, the server ignored our
+    // Range header. Restart from zero to avoid corrupting the partial file.
+    let restart_from_zero =
+      current > 0 && resp.status() != reqwest::StatusCode::PARTIAL_CONTENT;
+    let total_progress = if current == 0 || restart_from_zero {
       resp.content_length().map_or(-1, |length| length as i64)
     } else {
       -1
@@ -200,6 +206,7 @@ impl DownloadTask {
         Err(_) => Ok(bytes::Bytes::new()),
       }),
       total_progress,
+      restart_from_zero,
     ))
   }
 
@@ -217,14 +224,17 @@ impl DownloadTask {
     let param = self.param.clone();
     Ok((
       async move {
-        let (resp, total_progress) = Self::create_resp_stream(&app_handle, current, &param).await?;
+        let (resp, total_progress, restart_from_zero) =
+          Self::create_resp_stream(&app_handle, current, &param).await?;
         let stream = ProgressStream::new(resp, task_handle.clone());
         tokio::fs::create_dir_all(&self.dest_path.parent().unwrap()).await?;
-        let mut file = if current == 0 {
+        let effective_current = if restart_from_zero { 0 } else { current };
+        let mut file = if effective_current == 0 {
+          // File::create truncates any existing partial file when restarting.
           tokio::fs::File::create(&self.dest_path).await?
         } else {
           let mut f = tokio::fs::OpenOptions::new().open(&self.dest_path).await?;
-          f.seek(std::io::SeekFrom::Start(current as u64)).await?;
+          f.seek(std::io::SeekFrom::Start(effective_current as u64)).await?;
           f
         };
         {
