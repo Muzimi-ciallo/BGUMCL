@@ -46,6 +46,25 @@ pub(crate) fn download_client() -> &'static reqwest::Client {
   })
 }
 
+/// Whether this URL belongs to CurseForge / Modrinth (Minecraft resource
+/// CDNs). Only these downloads should go through the user-configured proxy;
+/// everything else (GitHub / Gitee / Mojang, etc.) keeps using the direct /
+/// mirrored download path.
+fn is_curseforge_or_modrinth_url(url: &url::Url) -> bool {
+  matches!(
+    url.host_str(),
+    Some(
+      "api.curseforge.com"
+        | "edge.forgecdn.net"
+        | "mediafilez.forgecdn.net"
+        | "curseforge.com"
+        | "api.modrinth.com"
+        | "cdn.modrinth.com"
+        | "modrinth.com"
+    )
+  )
+}
+
 /// Build a download client that honors the user-configured proxy, so files
 /// from CurseForge / Modrinth CDNs can be downloaded in regions where they are
 /// blocked or slow without a proxy.
@@ -170,10 +189,14 @@ impl DownloadTask {
     current: i64,
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
-    // Honor the user-configured proxy for downloads (e.g. to reach CurseForge /
-    // Modrinth CDNs from regions where they are blocked or slow).
+    // Use the user-configured proxy ONLY for CurseForge / Modrinth CDNs;
+    // all other downloads (GitHub / Gitee / Mojang, etc.) keep the direct or
+    // mirrored path (no proxy) so they are not broken by a proxy that only
+    // accelerates Minecraft resource sites (e.g. mcimirror.top).
     let client = if let Ok(config_binding) = app_handle.state::<Mutex<LauncherConfig>>().lock() {
-      if config_binding.download.proxy.enabled {
+      if config_binding.download.proxy.enabled
+        && is_curseforge_or_modrinth_url(&param.src)
+      {
         with_retry(build_download_client_with_proxy(&config_binding.download.proxy))
       } else {
         with_retry(download_client().clone())

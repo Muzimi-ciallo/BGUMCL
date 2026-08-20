@@ -1711,12 +1711,23 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       .get("assets")
       .and_then(|v| v.as_array())
       .and_then(|assets| {
-        assets.iter().find(|a| {
-          a.get("name")
-            .and_then(|n| n.as_str())
-            .map(|n| n.ends_with(".mrpack"))
-            .unwrap_or(false)
-        })
+        // Prefer a Modrinth .mrpack; fall back to a CurseForge .zip.
+        assets
+          .iter()
+          .find(|a| {
+            a.get("name")
+              .and_then(|n| n.as_str())
+              .map(|n| n.ends_with(".mrpack"))
+              .unwrap_or(false)
+          })
+          .or_else(|| {
+            assets.iter().find(|a| {
+              a.get("name")
+                .and_then(|n| n.as_str())
+                .map(|n| n.ends_with(".zip"))
+                .unwrap_or(false)
+            })
+          })
       })
       .ok_or(InstanceError::NetworkError)?;
     let name = asset

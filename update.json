@@ -1,6 +1,6 @@
 {
-  "version": "1.3.18",
-  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.18",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.3.19",
+  "base_url": "https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.3.19",
+  "release_notes": "BGUMCL 1.3.19：代理仅用于 CurseForge/Modrinth 下载，其他下载恢复直连/镜像（避免 mcimirror 等资源站代理导致一键下载失败）；一键下载整合包支持 .zip 与 .mrpack。",
+  "published_at": "2026-08-20T00:00:00Z"
 }
