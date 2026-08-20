@@ -39,6 +39,7 @@ pub(crate) fn download_client() -> &'static reqwest::Client {
   CLIENT.get_or_init(|| {
     reqwest::Client::builder()
       .timeout(Duration::from_secs(600))
+      .connect_timeout(Duration::from_secs(10))
       .tcp_keepalive(Duration::from_secs(30))
       .user_agent(DOWNLOAD_USER_AGENT)
       .build()
@@ -73,6 +74,7 @@ fn build_download_client_with_proxy(
 ) -> reqwest::Client {
   let mut builder = reqwest::Client::builder()
     .timeout(Duration::from_secs(600))
+    .connect_timeout(Duration::from_secs(10))
     .tcp_keepalive(Duration::from_secs(30))
     .user_agent(DOWNLOAD_USER_AGENT);
   if proxy_cfg.enabled {
@@ -190,51 +192,65 @@ impl DownloadTask {
     param: &DownloadParam,
   ) -> BGUMCLResult<reqwest::Response> {
     let is_cf_mr = is_curseforge_or_modrinth_url(&param.src);
-    // Use the user-configured proxy ONLY for CurseForge / Modrinth CDNs;
-    // all other downloads (GitHub / Gitee / Mojang, etc.) keep the direct or
-    // mirrored path (no proxy) so they are not broken by a proxy that only
-    // accelerates Minecraft resource sites (e.g. mcimirror.top).
-    //
-    // For CurseForge / Modrinth we use a plain client (no 1h retry wrapper)
-    // so the short per-candidate timeout and the MCIM mirror fallback below
-    // actually take effect quickly when the official CDN is blocked or slow
-    // in mainland China.
-    let client = if is_cf_mr {
-      let plain = if let Ok(config_binding) = app_handle.state::<Mutex<LauncherConfig>>().lock() {
-        if config_binding.download.proxy.enabled {
-          build_download_client_with_proxy(&config_binding.download.proxy)
-        } else {
-          download_client().clone()
-        }
-      } else {
-        download_client().clone()
-      };
-      // No 1h retry middleware here: the short per-candidate timeout and the
-      // MCIM mirror fallback below are what make these downloads fast in
-      // mainland China, and retrying a blocked official CDN would only delay
-      // the fallback to the mirror.
-      reqwest_middleware::ClientBuilder::new(plain).build()
-    } else {
-      with_retry(download_client().clone())
-    };
 
     // Build the list of candidate URLs to try, in order.
     let mut candidates: Vec<String> = Vec::new();
     if is_cf_mr {
-      // Original CDN URL first (honors the user-configured proxy when one is
-      // set), then the MCIM mirror (mod.mcimirror.top) as a fast mainland
-      // China fallback for the official Modrinth / CurseForge CDNs.
-      candidates.push(param.src.as_str().to_string());
+      // CurseForge / Modrinth file downloads go through the MCIM mirror
+      // (mod.mcimirror.top) FIRST, because the official CDNs are slow or
+      // blocked in mainland China. The official URL is kept as a fallback for
+      // when the mirror is unreachable or the user is outside China.
       if let Some(mirror) = crate::utils::web::mcim_mirror_url(param.src.as_str()) {
         candidates.push(mirror);
       }
+      candidates.push(param.src.as_str().to_string());
     } else {
       // GitHub-related downloads: Gitee mirror -> gh-proxy v4 -> cdn -> direct.
       candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
     }
 
+    // Use the user-configured proxy ONLY for the official CurseForge /
+    // Modrinth CDNs. The MCIM mirror is directly reachable in mainland China,
+    // and everything else (GitHub / Gitee / Mojang) keeps the direct / mirrored
+    // path so it is not broken by a proxy that only accelerates Minecraft
+    // resource sites.
+    let proxy_cfg = if is_cf_mr {
+      app_handle
+        .state::<Mutex<LauncherConfig>>()
+        .lock()
+        .ok()
+        .map(|c| c.download.proxy.clone())
+        .filter(|c| c.enabled)
+    } else {
+      None
+    };
+    let plain = download_client().clone();
+    let proxy = proxy_cfg
+      .as_ref()
+      .map(|cfg| build_download_client_with_proxy(cfg))
+      .unwrap_or_else(|| plain.clone());
+    // No 1h retry middleware for CurseForge / Modrinth so a blocked official
+    // CDN falls through to the mirror quickly. Other downloads keep the retry
+    // wrapper (with its own multi-mirror candidate list).
+    let plain_client = if is_cf_mr {
+      reqwest_middleware::ClientBuilder::new(plain).build()
+    } else {
+      with_retry(plain)
+    };
+    let proxy_client = reqwest_middleware::ClientBuilder::new(proxy).build();
+
     let mut last_err: Option<String> = None;
-    for (index, candidate) in candidates.iter().enumerate() {
+    for candidate in &candidates {
+      let is_mirror = is_cf_mr && candidate.as_str() != param.src.as_str();
+      let client = if is_cf_mr {
+        if is_mirror {
+          &plain_client
+        } else {
+          &proxy_client
+        }
+      } else {
+        &plain_client
+      };
       let url = url::Url::parse(candidate)
         .map_err(|e| BGUMCLError(format!("Invalid url {}: {}", candidate, e)))?;
       let mut request = if current == 0 {
@@ -247,14 +263,6 @@ impl DownloadTask {
       // ref: https://blog.curseforge.com/introducing-api-key-authentication-for-curseforge-file-downloads
       if is_curseforge_authenticated_url(&param.src) {
         request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
-      }
-
-      // The official CurseForge / Modrinth CDN can hang or be extremely slow
-      // in mainland China. Give the first (official) attempt a short timeout
-      // so we quickly fall through to the MCIM mirror instead of blocking the
-      // whole download for the 10-minute client timeout.
-      if is_cf_mr && index == 0 {
-        request = request.timeout(Duration::from_secs(15));
       }
 
       match request.send().await {
