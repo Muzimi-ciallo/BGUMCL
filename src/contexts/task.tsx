@@ -436,18 +436,27 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
 
           const { name, params } = parseTaskGroup(payload.taskGroup);
 
-          toast({
-            status:
-              payload.event === GTaskEventStatusEnums.Failed
-                ? "error"
-                : "success",
-            title: t(
-              `Services.task.onTaskGroupUpdate.status.${payload.event}`,
-              {
-                param: t(`DownloadTasksPage.task.${name}`, params),
-              }
-            ),
-          });
+          // Only notify on terminal group states. Started / Stopped would
+          // spam a toast for every group (e.g. many tasks restored on
+          // startup), flooding the bottom-left and blocking clicks.
+          if (
+            payload.event === GTaskEventStatusEnums.Completed ||
+            payload.event === GTaskEventStatusEnums.Failed ||
+            payload.event === GTaskEventStatusEnums.Cancelled
+          ) {
+            toast({
+              status:
+                payload.event === GTaskEventStatusEnums.Failed
+                  ? "error"
+                  : "success",
+              title: t(
+                `Services.task.onTaskGroupUpdate.status.${payload.event}`,
+                {
+                  param: t(`DownloadTasksPage.task.${name}`, params),
+                }
+              ),
+            });
+          }
 
           if (payload.event === GTaskEventStatusEnums.Completed) {
             switch (name) {

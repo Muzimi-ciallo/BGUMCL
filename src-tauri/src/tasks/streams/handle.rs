@@ -59,6 +59,9 @@ where
   pub fn mark_cancelled(&mut self) {
     self.desc.cancel();
     self.desc.save(&self.path).unwrap();
+    // Terminal tasks no longer need to be restored on restart; remove the
+    // saved descriptor so stale entries do not pile up in the cache.
+    let _ = std::fs::remove_file(&self.path);
     self
       .reporter
       .report_cancelled(self.desc.task_id, self.desc.task_group.as_deref());
@@ -67,6 +70,9 @@ where
   pub fn mark_completed(&mut self) {
     self.desc.complete();
     self.desc.save(&self.path).unwrap();
+    // Terminal tasks no longer need to be restored on restart; remove the
+    // saved descriptor so stale entries do not pile up in the cache.
+    let _ = std::fs::remove_file(&self.path);
     self
       .reporter
       .report_completion(self.desc.task_id, self.desc.task_group.as_deref());
@@ -85,6 +91,9 @@ where
   pub fn mark_failed(&mut self, reason: String) {
     self.desc.fail();
     self.desc.save(&self.path).unwrap();
+    // Terminal tasks no longer need to be restored on restart; remove the
+    // saved descriptor so stale entries do not pile up in the cache.
+    let _ = std::fs::remove_file(&self.path);
     self
       .reporter
       .report_failed(self.desc.task_id, self.desc.task_group.as_deref(), reason);

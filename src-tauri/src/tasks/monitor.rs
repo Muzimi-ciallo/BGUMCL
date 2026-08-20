@@ -78,7 +78,12 @@ impl TaskMonitor {
 
     // Task descriptors are written by DownloadTask as `task-{id}.json` in the
     // cache directory. Only resume tasks that were still waiting / running /
-    // stopped when the launcher closed; skip tasks that already finished.
+    // stopped when the launcher closed.
+    //  - Terminal tasks (completed / cancelled / failed) are cleaned up here so
+    //    stale descriptors do not pile up in the cache and keep being
+    //    "restored" on every launch.
+    //  - Tasks whose destination file already exists and matches the expected
+    //    SHA1 are treated as done and removed as well.
     for entry in glob(&format!("{}/task-*.json", cache_dir.to_str().unwrap())).unwrap() {
       if let Ok(task) = entry {
         match PTaskDesc::load(&task.clone()) {
@@ -87,7 +92,24 @@ impl TaskMonitor {
               desc.status,
               PStatus::Completed | PStatus::Cancelled | PStatus::Failed
             ) {
+              let _ = std::fs::remove_file(&task);
               continue;
+            }
+            if let PTaskParam::Download(param) = &desc.payload {
+              let dest_path = cache_dir.join(&param.dest);
+              if let Some(sha1) = &param.sha1 {
+                let dest_path = dest_path.clone();
+                let sha1 = sha1.clone();
+                let valid = tokio::task::spawn_blocking(move || {
+                  crate::utils::fs::validate_sha1(dest_path, sha1).is_ok()
+                })
+                .await
+                .unwrap_or(false);
+                if valid {
+                  let _ = std::fs::remove_file(&task);
+                  continue;
+                }
+              }
             }
             let task_id = desc.task_id;
             let task_group = desc.task_group.clone();
@@ -108,7 +130,10 @@ impl TaskMonitor {
             }
           }
           Err(_) => {
-            info!("Failed to load task descriptor: {}", task.display());
+            // Corrupt / unreadable descriptor: remove it so it does not block
+            // or confuse later startups.
+            let _ = std::fs::remove_file(&task);
+            info!("Removed unreadable task descriptor: {}", task.display());
           }
         }
       }
