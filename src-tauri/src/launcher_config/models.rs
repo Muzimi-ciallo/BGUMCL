@@ -294,7 +294,7 @@ structstruck::strike! {
     },
     pub download: struct DownloadConfig {
       pub source: struct {
-        #[default = "auto"]
+        #[default = "official"]
         pub strategy: String,
       },
       pub transmission: struct {
