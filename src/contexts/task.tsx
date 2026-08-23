@@ -469,18 +469,18 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
               case "game-client":
               case "change-mod-loader":
                 if (name === "game-client") {
-                  InstanceService.continueInstanceCreation(payload.taskGroup).then(
-                    (response) => {
-                      if (response.status === "error") {
-                        toast({
-                          title: response.message,
-                          description: response.details,
-                          status: "error",
-                        });
-                      }
-                      getInstanceList(true);
+                  InstanceService.continueInstanceCreation(
+                    payload.taskGroup
+                  ).then((response) => {
+                    if (response.status === "error") {
+                      toast({
+                        title: response.message,
+                        description: response.details,
+                        status: "error",
+                      });
                     }
-                  );
+                    getInstanceList(true);
+                  });
                 } else {
                   getInstanceList(true);
                 }
@@ -492,18 +492,18 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
                 getInstanceList(true);
                 break;
               case "game-client-w-java":
-                InstanceService.continueInstanceCreation(payload.taskGroup).then(
-                  (response) => {
-                    if (response.status === "error") {
-                      toast({
-                        title: response.message,
-                        description: response.details,
-                        status: "error",
-                      });
-                    }
-                    getInstanceList(true);
+                InstanceService.continueInstanceCreation(
+                  payload.taskGroup
+                ).then((response) => {
+                  if (response.status === "error") {
+                    toast({
+                      title: response.message,
+                      description: response.details,
+                      status: "error",
+                    });
                   }
-                );
+                  getInstanceList(true);
+                });
                 getJavaInfos(true);
                 break;
               case "forge-libraries":

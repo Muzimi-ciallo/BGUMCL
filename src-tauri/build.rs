@@ -46,6 +46,18 @@ fn main() {
     }
   }
 
+  // A formal release must contain the CurseForge key so that the MCIM
+  // metadata mirror has a reliable official fallback. Local development
+  // builds remain possible without the key because they do not set the
+  // release build marker.
+  if env::var("BGUMCL_BUILD_TYPE").as_deref() == Ok("release")
+    && env::var("BGUMCL_CURSEFORGE_API_KEY")
+      .map(|value| value.trim().is_empty())
+      .unwrap_or(true)
+  {
+    panic!("BGUMCL_CURSEFORGE_API_KEY is required for release builds");
+  }
+
   let out_dir = env::var("OUT_DIR").unwrap_or_else(|_| "".to_string());
   let dest_path = Path::new(&out_dir).join("secrets.rs");
   let _ = fs::remove_file(&dest_path);
