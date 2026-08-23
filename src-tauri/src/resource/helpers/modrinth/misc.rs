@@ -9,6 +9,7 @@ use crate::resource::models::{
   OtherResourceRequestType, OtherResourceSearchRes, OtherResourceSource, OtherResourceVersionPack,
   ResourceError,
 };
+use crate::utils::web::mcim_mirror_url;
 
 pub async fn make_modrinth_request<T, P>(
   client: &reqwest::Client,
@@ -19,25 +20,72 @@ where
   T: serde::de::DeserializeOwned,
   P: serde::Serialize,
 {
-  let request_builder = match request_type {
-    OtherResourceRequestType::GetWithParams(params) => client.get(url).query(params),
-    OtherResourceRequestType::Get => client.get(url),
-    OtherResourceRequestType::Post(payload) => client.post(url).json(payload),
-  };
-
-  let response = request_builder
-    .send()
-    .await
-    .map_err(|_| ResourceError::NetworkError)?;
-
-  if !response.status().is_success() {
-    return Err(ResourceError::NetworkError.into());
+  let mut candidates = vec![url.to_string()];
+  if let Some(mirror) = mcim_mirror_url(url) {
+    candidates.push(mirror);
   }
+  candidates.dedup();
 
-  response
-    .json::<T>()
-    .await
-    .map_err(|_| ResourceError::ParseError.into())
+  let mut last_error = ResourceError::NetworkError;
+  for candidate in candidates {
+    for attempt in 0..2 {
+      let request_builder = match request_type {
+        OtherResourceRequestType::GetWithParams(params) => client.get(&candidate).query(params),
+        OtherResourceRequestType::Get => client.get(&candidate),
+        OtherResourceRequestType::Post(payload) => client.post(&candidate).json(payload),
+      };
+      let response = match request_builder.send().await {
+        Ok(response) => response,
+        Err(error) => {
+          log::warn!(
+            "Modrinth request failed (source={}, attempt={}): {}",
+            if candidate == url { "official" } else { "mcim" },
+            attempt + 1,
+            error
+          );
+          last_error = ResourceError::NetworkError;
+          continue;
+        }
+      };
+      if !response.status().is_success() {
+        log::warn!(
+          "Modrinth request returned HTTP {} (source={}, attempt={})",
+          response.status(),
+          if candidate == url { "official" } else { "mcim" },
+          attempt + 1
+        );
+        last_error = ResourceError::NetworkError;
+        continue;
+      }
+      let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(error) => {
+          log::warn!(
+            "Modrinth response body read failed (source={}, attempt={}): {}",
+            if candidate == url { "official" } else { "mcim" },
+            attempt + 1,
+            error
+          );
+          last_error = ResourceError::ParseError;
+          continue;
+        }
+      };
+      match serde_json::from_slice::<T>(&body) {
+        Ok(value) => return Ok(value),
+        Err(error) => {
+          log::warn!(
+            "Modrinth response JSON decode failed (source={}, attempt={}, bytes={}): {}",
+            if candidate == url { "official" } else { "mcim" },
+            attempt + 1,
+            body.len(),
+            error
+          );
+          last_error = ResourceError::ParseError;
+        }
+      }
+    }
+  }
+  Err(last_error.into())
 }
 
 pub fn get_modrinth_api(

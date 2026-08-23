@@ -57,7 +57,11 @@ pub fn retrieve_player_list(app: AppHandle) -> BGUMCLResult<Vec<Player>> {
 }
 
 #[tauri::command]
-pub async fn add_player_offline(app: AppHandle, username: String, uuid: String) -> BGUMCLResult<()> {
+pub async fn add_player_offline(
+  app: AppHandle,
+  username: String,
+  uuid: String,
+) -> BGUMCLResult<()> {
   let new_player = offline::login(&app, username, uuid).await?;
 
   misc::add_player(&app, new_player)

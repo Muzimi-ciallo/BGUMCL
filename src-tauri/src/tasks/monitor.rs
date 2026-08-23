@@ -14,7 +14,9 @@ use tauri::async_runtime::JoinHandle;
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 use crate::launcher_config::commands::retrieve_launcher_config;
-use crate::tasks::download::{DownloadTask, RequestGate};
+use crate::tasks::download::{
+  DownloadGroupState, DownloadGroupStateHandle, DownloadTask, RequestGate,
+};
 use crate::tasks::events::{GEvent, GEventStatus, PEvent, TEvent};
 use crate::tasks::streams::desc::PStatus;
 use crate::tasks::{BGUMCLFuture, *};
@@ -35,8 +37,10 @@ pub struct TaskMonitor {
   rx: FlumeReceiver<BGUMCLFuture>,
   group_map: Arc<RwLock<HashMap<String, GroupMonitor>>>,
   stopped_futures: Arc<Mutex<Vec<BGUMCLFuture>>>,
+  download_groups: Arc<Mutex<HashMap<String, DownloadGroupStateHandle>>>,
   pub download_rate_limiter: Option<Limiter>,
   pub download_connections: Arc<Semaphore>,
+  pub download_connection_limit: usize,
   pub download_request_gate: RequestGate,
 }
 
@@ -45,9 +49,12 @@ impl TaskMonitor {
     let config = retrieve_launcher_config(app_handle.clone()).unwrap();
     let (tx, rx) = flume::unbounded();
     let download_connection_count = if config.download.transmission.auto_concurrent {
-      32
+      // V2 uses a larger I/O pool so small-file packs do not spend most of
+      // their time waiting in the task queue. The separate stream semaphore
+      // remains the hard ceiling for ordinary and ranged requests together.
+      128
     } else {
-      config.download.transmission.concurrent_count.clamp(1, 64)
+      config.download.transmission.concurrent_count.clamp(1, 128)
     };
     TaskMonitor {
       app_handle: app_handle.clone(),
@@ -57,14 +64,13 @@ impl TaskMonitor {
       tasks: Arc::new(Mutex::new(HashMap::new())),
       concurrency: Arc::new(Semaphore::new(
         if config.download.transmission.auto_concurrent {
-          // Downloads are I/O-bound. Limiting automatic concurrency to the
-          // CPU count leaves large modpacks waiting behind hundreds of small
-          // files, unlike PCL's download worker pool. Keep a bounded pool so
-          // this does not turn into an unbounded connection storm.
+          // Downloads are I/O-bound. Keep enough file futures runnable for
+          // the stream pool to remain full while other files verify hashes or
+          // wait for a cooled-down source.
           let cpu_count = std::thread::available_parallelism()
             .map(|count| count.get())
             .unwrap_or(4);
-          (cpu_count.saturating_mul(4)).clamp(8, 32)
+          (cpu_count.saturating_mul(8)).clamp(32, 128)
         } else {
           config.download.transmission.concurrent_count
         },
@@ -73,6 +79,7 @@ impl TaskMonitor {
       rx,
       group_map: Arc::new(RwLock::new(HashMap::new())),
       stopped_futures: Arc::new(Mutex::new(Vec::new())),
+      download_groups: Arc::new(Mutex::new(HashMap::new())),
       download_rate_limiter: if config.download.transmission.enable_speed_limit {
         Some(Limiter::new(
           (config.download.transmission.speed_limit_value as i64 * 1024) as f64,
@@ -84,10 +91,22 @@ impl TaskMonitor {
       // ranges. The task semaphore above limits task scheduling only; keeping
       // these separate prevents one large file from multiplying connections.
       download_connections: Arc::new(Semaphore::new(download_connection_count)),
+      download_connection_limit: download_connection_count,
       download_request_gate: Arc::new(AsyncMutex::new(
         Instant::now() - std::time::Duration::from_millis(100),
       )),
     }
+  }
+
+  pub fn download_context(&self, task_group: Option<&str>) -> DownloadGroupStateHandle {
+    let Some(task_group) = task_group else {
+      return Arc::new(DownloadGroupState::new(self.download_connection_limit));
+    };
+    let mut groups = self.download_groups.lock().unwrap();
+    groups
+      .entry(task_group.to_string())
+      .or_insert_with(|| Arc::new(DownloadGroupState::new(self.download_connection_limit)))
+      .clone()
   }
 
   #[allow(clippy::manual_flatten)]
@@ -135,7 +154,8 @@ impl TaskMonitor {
             }
             let task_id = desc.task_id;
             let task_group = desc.task_group.clone();
-            self.id_counter
+            self
+              .id_counter
               .fetch_max(task_id.saturating_add(1), Ordering::SeqCst);
             match desc.payload {
               PTaskParam::Download(_) => {
@@ -151,6 +171,7 @@ impl TaskMonitor {
                     self.download_rate_limiter.clone(),
                     self.download_connections.clone(),
                     self.download_request_gate.clone(),
+                    self.download_context(task_group.as_deref()),
                   )
                   .await
                   .unwrap();
@@ -328,6 +349,7 @@ impl TaskMonitor {
       let tasks = self.tasks.clone();
       let group_map = self.group_map.clone();
       let app = self.app_handle.clone();
+      let download_groups = self.download_groups.clone();
 
       self.tasks.lock().unwrap().insert(
         future.task_id,
@@ -359,8 +381,14 @@ impl TaskMonitor {
               {
                 group.phs.remove(&future.task_id);
                 if group.phs.is_empty() {
-                  group.status = GEventStatus::Completed;
-                  GEvent::emit_group_completed(&app, &group_name)
+                  let was_failed = group.status == GEventStatus::Failed;
+                  if !was_failed {
+                    group.status = GEventStatus::Completed;
+                  }
+                  download_groups.lock().unwrap().remove(&group_name);
+                  if !was_failed {
+                    GEvent::emit_group_completed(&app, &group_name)
+                  }
                 }
               }
             }
@@ -368,31 +396,17 @@ impl TaskMonitor {
               info!("Task failed: {e:?}");
               if let Some(group_name) = future.task_group {
                 GEvent::emit_group_failed(&app, &group_name);
-                let sibling_handles = group_map
-                  .write()
-                  .unwrap()
-                  .remove(&group_name)
-                  .map(|group| group.phs.into_iter().collect::<Vec<_>>())
-                  .unwrap_or_default();
-                let mut joins = Vec::new();
-                for (task_id, handle) in sibling_handles {
-                  if task_id == future.task_id {
-                    continue;
+                // PCL isolates a failed NetFile. Keep the other files alive
+                // so a transient failure in one MOD does not cancel an
+                // otherwise healthy import. The group remains Failed until
+                // its remaining files drain, preventing a false Completed
+                // event at the end.
+                if let Some(group) = group_map.write().unwrap().get_mut(&group_name) {
+                  group.status = GEventStatus::Failed;
+                  group.phs.remove(&future.task_id);
+                  if group.phs.is_empty() {
+                    download_groups.lock().unwrap().remove(&group_name);
                   }
-                  let mut handle_guard = handle.write().unwrap();
-                  if handle_guard.desc.status.is_waiting()
-                    || handle_guard.desc.status.is_in_progress()
-                  {
-                    handle_guard.mark_cancelled();
-                  }
-                  drop(handle_guard);
-                  if let Some(join_handle) = tasks.lock().unwrap().remove(&task_id) {
-                    join_handle.abort();
-                    joins.push(join_handle);
-                  }
-                }
-                for join_handle in joins {
-                  let _ = join_handle.await;
                 }
               }
             }
@@ -450,6 +464,7 @@ impl TaskMonitor {
               self.download_rate_limiter.clone(),
               self.download_connections.clone(),
               self.download_request_gate.clone(),
+              self.download_context(task_group.as_deref()),
             )
             .await
             .unwrap();
@@ -491,6 +506,9 @@ impl TaskMonitor {
       .retain(|future| future.task_group.as_deref() != Some(task_group.as_str()));
 
     let group = { self.group_map.write().unwrap().remove(&task_group) };
+    if let Some(download_group) = self.download_groups.lock().unwrap().remove(&task_group) {
+      download_group.cancel();
+    }
     if let Some(group) = group {
       let mut joins = Vec::new();
       for handle in group.phs.values() {

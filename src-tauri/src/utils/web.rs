@@ -202,10 +202,12 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
 
 /// Build mainland-China candidates for Minecraft's official download hosts.
 ///
-/// This follows PCL's source selection strategy: use BMCLAPI first for
-/// Mojang metadata, libraries, and assets, then keep the official URL as a
-/// fallback.  The path prefixes are important because BMCLAPI exposes the
-/// same files through separate `/maven`, `/libraries`, and `/assets` trees.
+/// This follows PCL's default source selection strategy: try the official
+/// Mojang URL first, then keep BMCLAPI as a fallback. The downloader can move
+/// a slow or failed source aside for the rest of the task group. The path
+/// prefixes are important because BMCLAPI exposes the same files through
+/// separate `/maven`, `/libraries`, and `/assets` trees.
+#[cfg(not(feature = "test-no-bmclapi"))]
 fn push_bmcl_candidate(candidates: &mut Vec<String>, parsed: &Url, path: &str) {
   let mut candidate = parsed.clone();
   if candidate.set_host(Some("bmclapi2.bangbang93.com")).is_err() {
@@ -218,6 +220,12 @@ fn push_bmcl_candidate(candidates: &mut Vec<String>, parsed: &Url, path: &str) {
   }
 }
 
+#[cfg(feature = "test-no-bmclapi")]
+pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
+  vec![url.to_string()]
+}
+
+#[cfg(not(feature = "test-no-bmclapi"))]
 pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
   let parsed = match Url::parse(url) {
     Ok(url) => url,
@@ -263,7 +271,10 @@ pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
     if let Some(rest) = path.strip_prefix("/assets") {
       candidates.push(url.to_string());
       let mut candidate = parsed.clone();
-      if candidate.set_host(Some("resources.download.minecraft.net")).is_ok() {
+      if candidate
+        .set_host(Some("resources.download.minecraft.net"))
+        .is_ok()
+      {
         candidate.set_path(rest);
         candidates.push(candidate.to_string());
       }
@@ -277,25 +288,40 @@ pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
     // for Forge's third-party libraries, which are not all hosted by
     // libraries.minecraft.net.
     "files.minecraftforge.net" => {
-      let path = parsed.path().strip_prefix("/maven").unwrap_or(parsed.path());
+      let path = parsed
+        .path()
+        .strip_prefix("/maven")
+        .unwrap_or(parsed.path());
       push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{path}"));
     }
     "maven.minecraftforge.net" => {
-      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{}", parsed.path()));
+      push_bmcl_candidate(
+        &mut candidates,
+        &parsed,
+        &format!("/maven{}", parsed.path()),
+      );
     }
     "maven.neoforged.net" => {
-      let path = parsed.path().strip_prefix("/releases").unwrap_or(parsed.path());
+      let path = parsed
+        .path()
+        .strip_prefix("/releases")
+        .unwrap_or(parsed.path());
       push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{path}"));
     }
-    "maven.fabricmc.net"
-    | "maven.quiltmc.org"
-    | "repo1.maven.org"
-    | "repo.maven.apache.org" => {
-      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{}", parsed.path()));
+    "maven.fabricmc.net" | "maven.quiltmc.org" | "repo1.maven.org" | "repo.maven.apache.org" => {
+      push_bmcl_candidate(
+        &mut candidates,
+        &parsed,
+        &format!("/maven{}", parsed.path()),
+      );
     }
     // PCL maps these asset URLs to BMCLAPI's assets tree.
     "resources.download.minecraft.net" => {
-      push_bmcl_candidate(&mut candidates, &parsed, &format!("/assets{}", parsed.path()));
+      push_bmcl_candidate(
+        &mut candidates,
+        &parsed,
+        &format!("/assets{}", parsed.path()),
+      );
     }
     // Libraries are available from both BMCLAPI Maven trees.  The first is
     // the usual fast path; the second covers files mirrored only in the
@@ -320,8 +346,12 @@ pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
     _ => return vec![url.to_string()],
   }
 
-  candidates.push(url.to_string());
-  candidates
+  // Keep the requested source first. When callers selected BMCLAPI as their
+  // explicit mirror source, the early BMCLAPI branch preserves that choice;
+  // official URLs receive their mirror candidate after them.
+  let mut ordered = vec![url.to_string()];
+  ordered.extend(candidates);
+  ordered
 }
 
 /// Map a CurseForge / Modrinth URL to its MCIM mirror

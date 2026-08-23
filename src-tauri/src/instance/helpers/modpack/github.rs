@@ -9,10 +9,10 @@ use tauri_plugin_http::reqwest;
 
 use crate::instance::helpers::misc::get_instance_subdir_path_by_id;
 use crate::instance::models::misc::{Instance, InstanceSubdirType};
+use crate::tasks::PTaskParam;
 use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 use crate::tasks::monitor::TaskMonitor;
-use crate::tasks::PTaskParam;
 use crate::utils::fs::calculate_sha1;
 
 const UPDATE_STATE_FILE_NAME: &str = ".sjmcl-github-update-state.json";
@@ -63,10 +63,14 @@ fn sanitize_relative_path(path: &str) -> BGUMCLResult<PathBuf> {
   let p = Path::new(&normalized);
   let valid = !normalized.is_empty()
     && !normalized.starts_with('/')
-    && p.components()
+    && p
+      .components()
       .all(|component| matches!(component, Component::Normal(_)));
   if !valid {
-    return Err(BGUMCLError(format!("Unsafe path in modpack manifest: {}", path)));
+    return Err(BGUMCLError(format!(
+      "Unsafe path in modpack manifest: {}",
+      path
+    )));
   }
   Ok(PathBuf::from(&normalized))
 }
@@ -114,7 +118,10 @@ fn normalize_manifest_url(raw: &str) -> String {
   raw.to_string()
 }
 
-async fn fetch_manifest(_app: &AppHandle, manifest_url: &str) -> BGUMCLResult<GithubModpackManifest> {
+async fn fetch_manifest(
+  _app: &AppHandle,
+  manifest_url: &str,
+) -> BGUMCLResult<GithubModpackManifest> {
   let normalized = normalize_manifest_url(manifest_url);
   // Try accelerated mirrors first (v4 -> cdn), then a direct connection, so
   // modpack updates still work in regions where one proxy is unreachable.
@@ -188,8 +195,7 @@ fn compute_update_plan(
     let rel = sanitize_relative_path(&file.path)?;
     let local = root.join(&rel);
     let local_sha = calculate_sha1(&local)?;
-    let up_to_date =
-      matches!(&local_sha, Some(sha) if sha.eq_ignore_ascii_case(&file.sha1));
+    let up_to_date = matches!(&local_sha, Some(sha) if sha.eq_ignore_ascii_case(&file.sha1));
     if !up_to_date {
       total_size = total_size.saturating_add(file.size);
       files_to_download.push(file.clone());
@@ -228,12 +234,9 @@ pub async fn check_github_modpack_update(
   instance_id: String,
 ) -> BGUMCLResult<GithubModpackUpdateInfo> {
   let instance = get_instance(&app, &instance_id)?;
-  let manifest_url = instance
-    .modpack_update_channel
-    .clone()
-    .ok_or_else(|| {
-      BGUMCLError("No modpack update channel configured for this instance".to_string())
-    })?;
+  let manifest_url = instance.modpack_update_channel.clone().ok_or_else(|| {
+    BGUMCLError("No modpack update channel configured for this instance".to_string())
+  })?;
 
   let manifest = fetch_manifest(&app, &manifest_url).await?;
   let root = get_instance_root(&app, &instance_id)?;
@@ -258,12 +261,9 @@ pub async fn apply_github_modpack_update(
   instance_id: String,
 ) -> BGUMCLResult<GithubModpackUpdateInfo> {
   let instance = get_instance(&app, &instance_id)?;
-  let manifest_url = instance
-    .modpack_update_channel
-    .clone()
-    .ok_or_else(|| {
-      BGUMCLError("No modpack update channel configured for this instance".to_string())
-    })?;
+  let manifest_url = instance.modpack_update_channel.clone().ok_or_else(|| {
+    BGUMCLError("No modpack update channel configured for this instance".to_string())
+  })?;
 
   let manifest = fetch_manifest(&app, &manifest_url).await?;
   let root = get_instance_root(&app, &instance_id)?;
@@ -380,9 +380,7 @@ async fn finalize_update(
     files: HashMap::new(),
   };
   for file in &manifest.files {
-    new_state
-      .files
-      .insert(file.path.clone(), file.sha1.clone());
+    new_state.files.insert(file.path.clone(), file.sha1.clone());
   }
   save_json_async(&new_state, &state_path(instance)).await?;
 

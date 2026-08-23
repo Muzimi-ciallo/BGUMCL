@@ -35,7 +35,11 @@ pub fn load_preset_skin(app: &AppHandle, preset_role: PresetRole) -> BGUMCLResul
   }])
 }
 
-pub async fn login(app: &AppHandle, username: String, raw_uuid: String) -> BGUMCLResult<PlayerInfo> {
+pub async fn login(
+  app: &AppHandle,
+  username: String,
+  raw_uuid: String,
+) -> BGUMCLResult<PlayerInfo> {
   let name_with_prefix = format!("OfflinePlayer:{}", username);
   let uuid = if let Ok(id) = Uuid::parse_str(&raw_uuid) {
     id
@@ -66,6 +70,3 @@ pub async fn login(app: &AppHandle, username: String, raw_uuid: String) -> BGUMC
     .with_generated_id(),
   )
 }
-
-
-

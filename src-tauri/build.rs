@@ -21,7 +21,9 @@ fn load_env_file(path: &Path) {
       }
       if key.starts_with("BGUMCL_") && !value.is_empty() {
         // std::env::set_var is `unsafe` on edition 2024 / newer Rust.
-        unsafe { env::set_var(&key, &value); }
+        unsafe {
+          env::set_var(&key, &value);
+        }
       }
     }
   }

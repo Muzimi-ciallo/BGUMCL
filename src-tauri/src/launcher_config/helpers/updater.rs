@@ -13,7 +13,8 @@ use crate::tasks::PTaskParam;
 use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 
-const MANIFEST_URL: &str = "https://raw.githubusercontent.com/Muzimi-ciallo/BGUMCL/main/update.json";
+const MANIFEST_URL: &str =
+  "https://raw.githubusercontent.com/Muzimi-ciallo/BGUMCL/main/update.json";
 const DOWNLOAD_BASE_URL: &str = "https://github.com/Muzimi-ciallo/BGUMCL/releases/download";
 
 // Generate the new version filename on remote origin according to the current os, arch and is_portable
@@ -73,7 +74,11 @@ pub async fn fetch_latest_version(
       {
         Ok(response) => response,
         Err(error) => {
-          log::warn!("Update manifest request failed for {}: {}", manifest_url, error);
+          log::warn!(
+            "Update manifest request failed for {}: {}",
+            manifest_url,
+            error
+          );
           continue;
         }
       };
@@ -88,14 +93,22 @@ pub async fn fetch_latest_version(
       let body = match response.bytes().await {
         Ok(body) => body,
         Err(error) => {
-          log::warn!("Update manifest body failed for {}: {}", manifest_url, error);
+          log::warn!(
+            "Update manifest body failed for {}: {}",
+            manifest_url,
+            error
+          );
           continue;
         }
       };
       let parsed = match serde_json::from_slice::<Value>(&body) {
         Ok(parsed) => parsed,
         Err(error) => {
-          log::warn!("Update manifest JSON failed for {}: {}", manifest_url, error);
+          log::warn!(
+            "Update manifest JSON failed for {}: {}",
+            manifest_url,
+            error
+          );
           continue;
         }
       };
@@ -147,7 +160,13 @@ pub async fn fetch_latest_version(
     .unwrap_or_default()
     .to_string();
 
-  Ok(Some((ver, fname, download_url, release_notes, published_at)))
+  Ok(Some((
+    ver,
+    fname,
+    download_url,
+    release_notes,
+    published_at,
+  )))
 }
 
 pub async fn download_target_version(
@@ -210,25 +229,25 @@ pub async fn install_update_windows(
   let cur_exe = std::env::current_exe()?;
 
   // Portable: replace current exe with the newly downloaded one via a temp cmd script.
-    let cur_dir = cur_exe
-      .parent()
-      .ok_or_else(|| BGUMCLError("No parent dir for exe".to_string()))?;
-    let old_name = cur_exe
-      .file_name()
-      .and_then(|s| s.to_str())
-      .ok_or_else(|| BGUMCLError("Invalid exe name".to_string()))?
-      .to_string();
+  let cur_dir = cur_exe
+    .parent()
+    .ok_or_else(|| BGUMCLError("No parent dir for exe".to_string()))?;
+  let old_name = cur_exe
+    .file_name()
+    .and_then(|s| s.to_str())
+    .ok_or_else(|| BGUMCLError("Invalid exe name".to_string()))?
+    .to_string();
 
-    let target_name = build_local_new_filename(&old_name, &old_version, &new_version);
-    let target = cur_dir.join(target_name);
-    let pid = std::process::id().to_string();
-    let restart_flag = if restart { "1" } else { "0" };
+  let target_name = build_local_new_filename(&old_name, &old_version, &new_version);
+  let target = cur_dir.join(target_name);
+  let pid = std::process::id().to_string();
+  let restart_flag = if restart { "1" } else { "0" };
 
-    // write and execute a PowerShell script to wait -> replace -> start -> cleanup
-    let script_path = app
-      .path()
-      .resolve::<PathBuf>("update.ps1".into(), BaseDirectory::AppCache)?;
-    let script_content = r#"param(
+  // write and execute a PowerShell script to wait -> replace -> start -> cleanup
+  let script_path = app
+    .path()
+    .resolve::<PathBuf>("update.ps1".into(), BaseDirectory::AppCache)?;
+  let script_content = r#"param(
   [string]$ProcessId,
   [string]$Downloaded,
   [string]$Target,
@@ -255,26 +274,25 @@ try {
 }
 "#;
 
-    fs::write(&script_path, script_content.as_bytes())?;
-    let _ = Command::new("powershell.exe")
-      .arg("-NoProfile")
-      .arg("-ExecutionPolicy")
-      .arg("Bypass")
-      .arg("-File")
-      .arg(&script_path)
-      .arg(&pid)
-      .arg(&downloaded_path)
-      .arg(&target)
-      .arg(&cur_exe)
-      .arg(restart_flag)
-      .creation_flags(0x08000000)
-      .spawn()?;
+  fs::write(&script_path, script_content.as_bytes())?;
+  let _ = Command::new("powershell.exe")
+    .arg("-NoProfile")
+    .arg("-ExecutionPolicy")
+    .arg("Bypass")
+    .arg("-File")
+    .arg(&script_path)
+    .arg(&pid)
+    .arg(&downloaded_path)
+    .arg(&target)
+    .arg(&cur_exe)
+    .arg(restart_flag)
+    .creation_flags(0x08000000)
+    .spawn()?;
 
-    if restart {
-      app.exit(0);
-    }
-    Ok(())
-
+  if restart {
+    app.exit(0);
+  }
+  Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -377,5 +395,3 @@ rm -rf "$TMPDIR" || true
   }
   Ok(())
 }
-
-

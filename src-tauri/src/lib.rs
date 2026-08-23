@@ -158,14 +158,14 @@ pub async fn run() {
         instance::commands::remove_mod_loader,
         instance::commands::remove_optifine,
         instance::commands::retrieve_modpack_meta_info,
-instance::commands::download_wanda_modpack,
+        instance::commands::download_wanda_modpack,
         instance::commands::add_custom_instance_icon,
         instance::commands::retrieve_exportable_file_list,
         instance::commands::export_modpack,
         instance::helpers::modpack::github::check_github_modpack_update,
         instance::helpers::modpack::github::apply_github_modpack_update,
         instance::helpers::modpack::github::set_github_modpack_update_channel,
-    instance::helpers::modpack::github::set_modpack_version,
+        instance::helpers::modpack::github::set_modpack_version,
         launch::commands::select_suitable_jre,
         launch::commands::validate_game_files,
         launch::commands::validate_selected_player,
@@ -426,4 +426,3 @@ instance::commands::download_wanda_modpack,
 
   std::process::exit(exit_code);
 }
-

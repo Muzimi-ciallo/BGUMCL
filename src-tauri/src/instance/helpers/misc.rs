@@ -57,12 +57,13 @@ pub fn register_pending_instance_creation(
 /// Continue the explicit second stage of a newly-created instance.  Ordinary
 /// instance refreshes stay read-only; only the successful base-download event
 /// is allowed to start Forge/NeoForge/OptiFine runtime downloads.
-pub async fn continue_instance_creation(
-  app: &AppHandle,
-  task_group: &str,
-) -> BGUMCLResult<()> {
+pub async fn continue_instance_creation(app: &AppHandle, task_group: &str) -> BGUMCLResult<()> {
   let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
-  let Some(record) = pending.lock().ok().and_then(|state| state.get(task_group).cloned()) else {
+  let Some(record) = pending
+    .lock()
+    .ok()
+    .and_then(|state| state.get(task_group).cloned())
+  else {
     return Ok(());
   };
   let mut instance = app
