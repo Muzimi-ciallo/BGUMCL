@@ -170,6 +170,6 @@ python scripts/release/bundle_portable_assets.py `
 
 BGUMCL **基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 修改而来**，并非 SJMCL 官方发行版。感谢 SJMCL 项目及其所有[贡献者](https://github.com/UNIkeEN/SJMCL/graphs/contributors)提供的开源基础与启发。
 
-同时感谢 DSV4-Pro 在项目修改和调试过程中的协助，以及“蓝色吃白饭大肥鱼”提供的协作与支持。
+同时感谢 DSV4-Pro 蓝色吃白饭大肥鱼 在项目修改和调试过程中的协助与支持。
 
 本项目依据 [GNU General Public License v3.0](LICENSE) 及其[附加条款](LICENSE.EXTRA)发布。分发修改版本时，请同时遵守两份许可文件中的要求。
