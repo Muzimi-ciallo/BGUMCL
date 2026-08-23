@@ -29,7 +29,7 @@ jobs:
           version = ref[1:] if ref.startswith("v") else ref
           data = {
               "version": version,
-              "base_url": f"https://v4.gh-proxy.org/https://github.com/{repo}/releases/download/{ref}",
+              "base_url": f"https://github.com/{repo}/releases/download/{ref}",
               "release_notes": "",
               "published_at": "",
           }
