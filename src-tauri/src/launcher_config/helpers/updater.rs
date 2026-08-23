@@ -13,7 +13,7 @@ use crate::tasks::PTaskParam;
 use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 
-const MANIFEST_URL: &str = "https://v4.gh-proxy.org/https://raw.githubusercontent.com/Muzimi-ciallo/BGUMCL/main/update.json";
+const MANIFEST_URL: &str = "https://raw.githubusercontent.com/Muzimi-ciallo/BGUMCL/main/update.json";
 const DOWNLOAD_BASE_URL: &str = "https://github.com/Muzimi-ciallo/BGUMCL/releases/download";
 
 // Generate the new version filename on remote origin according to the current os, arch and is_portable
@@ -57,28 +57,71 @@ pub async fn fetch_latest_version(
   };
   let client = app.state::<reqwest::Client>();
 
-  // Try accelerated mirrors first (v4 -> cdn), then a direct connection, so
-  // update checks still work in regions where one proxy is unreachable.
+  // Query every available manifest source. Gitee can lag behind GitHub while
+  // a large release asset is being synchronized, so accepting the first valid
+  // JSON response can make a newer client appear to have no update.
   let manifest_candidates = crate::utils::web::gh_proxy_candidates(MANIFEST_URL);
-  let mut j: Option<Value> = None;
-  for attempt in 0..3u32 {
+  let mut best_manifest: Option<(semver::Version, Value)> = None;
+  for attempt in 0..2u32 {
     for manifest_url in &manifest_candidates {
-      if let Ok(resp) = client.get(manifest_url).send().await
-        && resp.status().is_success()
-        && let Ok(parsed) = resp.json::<Value>().await
+      let response = match client
+        .get(manifest_url)
+        .header("accept", "application/json")
+        .header("accept-encoding", "identity")
+        .send()
+        .await
       {
-        j = Some(parsed);
-        break;
+        Ok(response) => response,
+        Err(error) => {
+          log::warn!("Update manifest request failed for {}: {}", manifest_url, error);
+          continue;
+        }
+      };
+      if !response.status().is_success() {
+        log::warn!(
+          "Update manifest source returned {}: {}",
+          response.status(),
+          manifest_url
+        );
+        continue;
+      }
+      let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(error) => {
+          log::warn!("Update manifest body failed for {}: {}", manifest_url, error);
+          continue;
+        }
+      };
+      let parsed = match serde_json::from_slice::<Value>(&body) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+          log::warn!("Update manifest JSON failed for {}: {}", manifest_url, error);
+          continue;
+        }
+      };
+      let Some(version_text) = parsed.get("version").and_then(|value| value.as_str()) else {
+        continue;
+      };
+      let Ok(version) = semver::Version::parse(version_text) else {
+        log::warn!("Update manifest has invalid version from {}", manifest_url);
+        continue;
+      };
+      let is_newer = best_manifest
+        .as_ref()
+        .map(|(best, _)| version > *best)
+        .unwrap_or(true);
+      if is_newer {
+        best_manifest = Some((version, parsed));
       }
     }
-    if j.is_some() {
+    if best_manifest.is_some() {
       break;
     }
-    if attempt < 2 {
+    if attempt < 1 {
       tokio::time::sleep(std::time::Duration::from_millis(600)).await;
     }
   }
-  let j = j.ok_or(LauncherConfigError::FetchError)?;
+  let (_, j) = best_manifest.ok_or(LauncherConfigError::FetchError)?;
 
   let Some(ver) = j.get("version").and_then(|v| v.as_str()) else {
     return Err(LauncherConfigError::FetchError.into());

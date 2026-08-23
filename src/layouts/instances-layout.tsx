@@ -165,8 +165,7 @@ const InstancesLayout: React.FC<InstancesLayoutProps> = ({ children }) => {
                     });
                   } else {
                     router.push(
-                      typeof value === "string" &&
-                        value.startsWith("/")
+                      typeof value === "string" && value.startsWith("/")
                         ? value
                         : detailsRoute
                     );
