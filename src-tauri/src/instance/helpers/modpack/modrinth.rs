@@ -16,7 +16,9 @@ use zip::ZipArchive;
 use crate::instance::helpers::modpack::export::{
   ExportModpackOptions, ModpackExportBundle, normalize_mod_loader_version,
 };
-use crate::instance::helpers::modpack::import::{ModpackManifest, ModpackMetaInfo};
+use crate::instance::helpers::modpack::import::{
+  ModpackManifest, ModpackMetaInfo, is_safe_relative_modpack_path,
+};
 use crate::instance::models::misc::{Instance, InstanceError, ModLoader, ModLoaderType};
 use crate::resource::helpers::{
   curseforge::fetch_remote_resource_by_local_curseforge,
@@ -70,21 +72,57 @@ impl ModpackManifest for ModrinthManifest {
     let manifest: Self = serde_json::from_str(&manifest_content).inspect_err(|e| {
       eprintln!("{:?}", e);
     })?;
+    if manifest.format_version != 1
+      || manifest.game != "minecraft"
+      || manifest
+        .files
+        .iter()
+        .any(|file| !is_safe_relative_modpack_path(&file.path))
+    {
+      return Err(InstanceError::ModpackManifestParseError.into());
+    }
     Ok(manifest)
   }
 
   async fn get_meta_info(&self, app: &AppHandle) -> BGUMCLResult<ModpackMetaInfo> {
     let client_version = self.get_client_version()?;
+    let known_dependencies = ["minecraft", "forge", "neoforge", "fabric-loader", "quilt-loader"];
+    if self
+      .dependencies
+      .keys()
+      .any(|key| !known_dependencies.contains(&key.as_str()))
+    {
+      return Err(InstanceError::UnsupportedModLoader.into());
+    }
     let mod_loader = if let Ok((loader_type, version)) = self.get_mod_loader_type_version() {
-      Some(
-        ModLoader {
-          loader_type,
-          version,
-          ..Default::default()
+      let mut loader = ModLoader {
+        loader_type,
+        version,
+        ..Default::default()
+      };
+
+      // Modrinth already stores the exact loader version in the manifest. A
+      // branch lookup is only needed by Forge's installer URL builder, and a
+      // failed metadata request must not prevent the archive from importing.
+      if matches!(
+        loader_type,
+        ModLoaderType::Forge | ModLoaderType::LegacyForge
+      ) {
+        match loader
+          .clone()
+          .with_branch(app, client_version.clone())
+          .await
+        {
+          Ok(enriched) => loader = enriched,
+          Err(error) => log::warn!(
+            "Modrinth loader branch lookup failed for {} {}: {:?}",
+            client_version,
+            loader.version,
+            error
+          ),
         }
-        .with_branch(app, client_version.clone())
-        .await?,
-      )
+      }
+      Some(loader)
     } else {
       None
     };
@@ -100,6 +138,9 @@ impl ModpackManifest for ModrinthManifest {
   }
 
   fn get_client_version(&self) -> BGUMCLResult<String> {
+    if self.format_version != 1 || self.game != "minecraft" {
+      return Err(InstanceError::ModpackManifestParseError.into());
+    }
     Ok(
       self
         .dependencies
@@ -110,13 +151,14 @@ impl ModpackManifest for ModrinthManifest {
   }
 
   fn get_mod_loader_type_version(&self) -> BGUMCLResult<(ModLoaderType, String)> {
-    for (key, val) in &self.dependencies {
-      match key.as_str() {
-        "minecraft" => continue,
-        "forge" => return Ok((ModLoaderType::Forge, val.to_string())),
-        "fabric-loader" => return Ok((ModLoaderType::Fabric, val.to_string())),
-        "neoforge" => return Ok((ModLoaderType::NeoForge, val.to_string())),
-        _ => return Err(InstanceError::UnsupportedModLoader.into()),
+    for (key, loader_type) in [
+      ("forge", ModLoaderType::Forge),
+      ("neoforge", ModLoaderType::NeoForge),
+      ("fabric-loader", ModLoaderType::Fabric),
+      ("quilt-loader", ModLoaderType::Quilt),
+    ] {
+      if let Some(version) = self.dependencies.get(key) {
+        return Ok((loader_type, version.clone()));
       }
     }
     Err(InstanceError::ModpackManifestParseError.into())
@@ -131,12 +173,19 @@ impl ModpackManifest for ModrinthManifest {
       .files
       .iter()
       .map(|file| {
+        if !is_safe_relative_modpack_path(&file.path) {
+          return Err(InstanceError::InvalidSourcePath.into());
+        }
         let download_url = file
           .downloads
-          .first()
+          .iter()
+          .find_map(|candidate| {
+            let parsed = url::Url::parse(candidate).ok()?;
+            (parsed.scheme() == "https").then_some(parsed)
+          })
           .ok_or(InstanceError::InvalidSourcePath)?;
         Ok(PTaskParam::Download(DownloadParam {
-          src: url::Url::parse(download_url).map_err(|_| InstanceError::InvalidSourcePath)?,
+          src: download_url,
           sha1: Some(file.hashes.sha1.clone()),
           dest: instance_path.join(&file.path),
           filename: None,
@@ -146,7 +195,11 @@ impl ModpackManifest for ModrinthManifest {
   }
 
   fn get_overrides_path(&self) -> String {
-    "overrides/".to_string()
+    "overrides".to_string()
+  }
+
+  fn get_override_paths(&self) -> Vec<String> {
+    vec!["overrides".to_string(), "client-overrides".to_string()]
   }
 }
 

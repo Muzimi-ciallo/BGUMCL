@@ -12,7 +12,7 @@ mod utils;
 use account::helpers::authlib_injector::info::refresh_and_update_auth_servers;
 use account::helpers::offline::yggdrasil_server::YggdrasilServer;
 use account::models::AccountInfo;
-use instance::helpers::misc::refresh_and_update_instances;
+use instance::helpers::misc::{PendingInstanceCreationMap, refresh_and_update_instances};
 use instance::models::misc::Instance;
 use launch::models::LaunchingState;
 use launcher_config::helpers::java::refresh_and_update_javas;
@@ -127,6 +127,7 @@ pub async fn run() {
         account::commands::import_external_account_info,
         instance::commands::retrieve_instance_list,
         instance::commands::create_instance,
+        instance::commands::continue_instance_creation,
         instance::commands::update_instance_config,
         instance::commands::retrieve_instance_game_config,
         instance::commands::reset_instance_game_config,
@@ -243,6 +244,11 @@ instance::commands::download_wanda_modpack,
 
         let instances: HashMap<String, Instance> = HashMap::new();
         app.manage(Mutex::new(instances));
+
+        // Tracks only instance creations started in this process.  Cancellation
+        // cleanup uses the exact path from this map and never derives a path
+        // from a task display name.
+        app.manage(Mutex::new(PendingInstanceCreationMap::new()));
 
         let javas: Vec<JavaInfo> = vec![];
         app.manage(Mutex::new(javas));

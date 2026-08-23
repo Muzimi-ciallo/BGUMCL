@@ -31,36 +31,63 @@ pub async fn get_fabric_meta_by_game_version(
   game_version: &str,
 ) -> BGUMCLResult<Vec<ModLoaderResourceInfo>> {
   let client = app.state::<reqwest::Client>();
+  let mut saw_parse_error = false;
   for source_type in priority_list.iter() {
     let url = get_download_api(*source_type, ResourceType::FabricMeta)?
       .join("v2/versions/loader/")?
       .join(game_version)?;
-    match client.get(url).send().await {
+    match client
+      .get(url.clone())
+      .header("accept", "application/json")
+      .header("accept-encoding", "identity")
+      .send()
+      .await
+    {
       Ok(response) => {
         if response.status().is_success() {
-          if let Ok(manifest) = response.json::<Vec<FabricMetaItem>>().await {
-            return Ok(
-              manifest
-                .into_iter()
-                .map(|info| ModLoaderResourceInfo {
-                  loader_type: ModLoaderType::Fabric,
-                  version: info.loader.version,
-                  description: String::new(),
-                  // stable: info.loader.stable,
-                  stable: None,
-                  branch: None,
-                })
-                .collect(),
-            );
-          } else {
-            return Err(ResourceError::ParseError.into());
+          match response.bytes().await {
+            Ok(body) => match serde_json::from_slice::<Vec<FabricMetaItem>>(&body) {
+              Ok(manifest) => {
+                return Ok(
+                  manifest
+                    .into_iter()
+                    .map(|info| ModLoaderResourceInfo {
+                      loader_type: ModLoaderType::Fabric,
+                      version: info.loader.version,
+                      description: String::new(),
+                      // stable: info.loader.stable,
+                      stable: None,
+                      branch: None,
+                    })
+                    .collect(),
+                );
+              }
+              Err(error) => {
+                saw_parse_error = true;
+                log::warn!(
+                  "Fabric metadata JSON parse failed from {} ({} bytes): {}",
+                  url,
+                  body.len(),
+                  error
+                );
+              }
+            },
+            Err(error) => log::warn!("Fabric metadata body read failed from {}: {}", url, error),
           }
         } else {
-          continue;
+          log::warn!(
+            "Fabric metadata source {} returned HTTP {}",
+            url,
+            response.status()
+          );
         }
       }
-      Err(_) => continue,
+      Err(error) => log::warn!("Fabric metadata request failed for {}: {}", url, error),
     }
   }
-  Err(ResourceError::NetworkError.into())
+  if saw_parse_error {
+    Err(ResourceError::ParseError.into())
+  } else {
+    Err(ResourceError::NetworkError.into())
+  }
 }

@@ -2788,7 +2788,8 @@
             "FILE_CREATION_FAILED": "目标文件创建失败",
             "NETWORK_ERROR": "网络错误",
             "CLIENT_JSON_PARSE_ERROR": "实例版本信息解析错误",
-            "ASSET_INDEX_PARSE_ERROR": "资源索引文件解析错误"
+            "ASSET_INDEX_PARSE_ERROR": "资源索引文件解析错误",
+            "CURSE_FORGE_FILE_MANIFEST_PARSE_ERROR": "CurseForge 文件信息响应损坏，已重试所有备用源"
           }
         }
       },

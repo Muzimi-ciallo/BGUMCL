@@ -45,9 +45,9 @@ pub struct PEvent<'a> {
 
 impl<'a> PEvent<'a> {
   pub fn emit(self, app: &AppHandle) {
-    app
-      .emit_to("main", TASK_PROGRESS_UPDATE_EVENT, self)
-      .unwrap();
+    if let Err(error) = app.emit_to("main", TASK_PROGRESS_UPDATE_EVENT, self) {
+      log::debug!("Task progress event was not delivered: {}", error);
+    }
   }
 
   pub fn emit_started(app: &AppHandle, id: u32, task_group: Option<&'a str>, total: i64) {
@@ -145,7 +145,9 @@ pub struct GEvent<'a> {
 
 impl<'a> GEvent<'a> {
   fn emit(self, app: &AppHandle) {
-    app.emit_to("main", TASK_GROUP_UPDATE_EVENT, self).unwrap();
+    if let Err(error) = app.emit_to("main", TASK_GROUP_UPDATE_EVENT, self) {
+      log::debug!("Task group event was not delivered: {}", error);
+    }
   }
   pub fn emit_group_started(app: &AppHandle, task_group: &'a str) {
     Self {
