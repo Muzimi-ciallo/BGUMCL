@@ -376,12 +376,21 @@ pub async fn check_launcher_update(app: AppHandle) -> BGUMCLResult<VersionMetaIn
 }
 
 #[tauri::command]
-pub async fn download_launcher_update(app: AppHandle, version: VersionMetaInfo) -> BGUMCLResult<()> {
+pub async fn download_launcher_update(
+  app: AppHandle,
+  version: VersionMetaInfo,
+) -> BGUMCLResult<()> {
   if version.version.is_empty() || version.version == "up2date" {
     Ok(())
   } else {
     // TODO: handle already downloaded case
-    return download_target_version(&app, version.version, version.file_name, version.download_url).await;
+    return download_target_version(
+      &app,
+      version.version,
+      version.file_name,
+      version.download_url,
+    )
+    .await;
   }
 }
 
@@ -415,4 +424,3 @@ pub fn retrieve_supported_graphics_renderers(api: String) -> BGUMCLResult<Vec<St
 
   Ok(supported_graphics_renderers(&api))
 }
-

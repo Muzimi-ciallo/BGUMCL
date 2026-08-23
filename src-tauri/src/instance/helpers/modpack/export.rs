@@ -402,4 +402,3 @@ pub async fn create_modpack_zip(
   .await
   .map_err(|e| BGUMCLError(format!("Failed to join zip creation task: {}", e)))?
 }
-

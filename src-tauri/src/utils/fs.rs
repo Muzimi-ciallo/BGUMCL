@@ -199,7 +199,10 @@ pub fn get_subdirectories<P: AsRef<Path>>(path: P) -> BGUMCLResult<Vec<PathBuf>>
 /// ```rust
 /// let mod_paths = get_files_with_regex(&mods_dir, &valid_extensions).unwrap_or_default();
 /// ```
-pub fn get_files_with_regex<P: AsRef<Path>>(path: P, pattern: &Regex) -> BGUMCLResult<Vec<PathBuf>> {
+pub fn get_files_with_regex<P: AsRef<Path>>(
+  path: P,
+  pattern: &Regex,
+) -> BGUMCLResult<Vec<PathBuf>> {
   get_files_with_regex_recursive(path, pattern, Some(0))
 }
 

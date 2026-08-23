@@ -3,7 +3,9 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::AppHandle;
+use tauri::Manager;
+use tauri::{AppHandle, Url};
+use tauri_plugin_http::reqwest;
 use zip::{ZipArchive, ZipWriter, write::FileOptions};
 
 use crate::instance::helpers::client_json::{ArgumentsItem, LaunchArgumentTemplate};
@@ -20,17 +22,50 @@ use crate::tasks::commands::schedule_progressive_task_group;
 use crate::tasks::download::DownloadParam;
 
 pub async fn download_optifine_installer(
+  app: &AppHandle,
   game_version: &str,
   optifine: &OptiFineResourceInfo,
   lib_dir: PathBuf,
   task_params: &mut Vec<PTaskParam>,
 ) -> BGUMCLResult<()> {
-  // only have BMCLAPI source
-  let root = get_download_api(SourceType::BMCLAPIMirror, ResourceType::OptiFine)?;
-  let installer_url = root.join(&format!(
+  let bmcl_root = get_download_api(SourceType::BMCLAPIMirror, ResourceType::OptiFine)?;
+  let bmcl_url = bmcl_root.join(&format!(
     "{}/{}/{}",
     game_version, optifine.r#type, optifine.patch
   ))?;
+  let file_name = if optifine.filename.ends_with(".jar") {
+    optifine.filename.clone()
+  } else {
+    format!("{}.jar", optifine.filename)
+  };
+
+  // PCL resolves OptiFine's official anti-bot page first, then keeps the
+  // resulting downloadx URL as a fallback beside BMCLAPI.
+  let official_url = {
+    let request_url = format!(
+      "https://optifine.net/adloadx?f={}",
+      urlencoding::encode(&file_name)
+    );
+    let client = app.state::<reqwest::Client>();
+    match client
+      .get(request_url)
+      .header("Accept", "text/html")
+      .send()
+      .await
+    {
+      Ok(response) if response.status().is_success() => {
+        response.text().await.ok().and_then(|body| {
+          regex::Regex::new(r##"downloadx\?f=[^"'\s]+"##)
+            .ok()?
+            .find(&body)
+            .and_then(|matched| {
+              Url::parse(&format!("https://optifine.net/{}", matched.as_str())).ok()
+            })
+        })
+      }
+      _ => None,
+    }
+  };
 
   let installer_coord = format!(
     "net.minecraftforge:optifine:{}-installer",
@@ -40,9 +75,9 @@ pub async fn download_optifine_installer(
   let installer_path = lib_dir.join(&installer_rel);
 
   task_params.push(PTaskParam::Download(DownloadParam {
-    src: installer_url,
+    src: official_url.unwrap_or(bmcl_url),
     dest: installer_path.clone(),
-    filename: None,
+    filename: Some(file_name),
     sha1: None,
   }));
 

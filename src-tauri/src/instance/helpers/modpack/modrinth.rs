@@ -86,7 +86,13 @@ impl ModpackManifest for ModrinthManifest {
 
   async fn get_meta_info(&self, app: &AppHandle) -> BGUMCLResult<ModpackMetaInfo> {
     let client_version = self.get_client_version()?;
-    let known_dependencies = ["minecraft", "forge", "neoforge", "fabric-loader", "quilt-loader"];
+    let known_dependencies = [
+      "minecraft",
+      "forge",
+      "neoforge",
+      "fabric-loader",
+      "quilt-loader",
+    ];
     if self
       .dependencies
       .keys()

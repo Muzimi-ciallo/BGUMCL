@@ -38,14 +38,36 @@ pub async fn get_game_version_manifest(
 
   for source_type in priority_list.iter() {
     let url = get_download_api(*source_type, ResourceType::VersionManifest)?;
-    let response = match client.get(url).send().await {
+    let response = match client.get(url.clone()).send().await {
       Ok(resp) if resp.status().is_success() => resp,
       _ => continue,
     };
 
-    let manifest = match response.json::<VersionManifest>().await {
-      Ok(m) => m,
-      Err(_) => return Err(ResourceError::ParseError.into()),
+    let body = match response.bytes().await {
+      Ok(body) => body,
+      Err(error) => {
+        log::warn!(
+          "Minecraft version manifest body read failed from {}: {}",
+          url,
+          error
+        );
+        continue;
+      }
+    };
+    let manifest = match serde_json::from_slice::<VersionManifest>(&body) {
+      Ok(manifest) => manifest,
+      Err(error) => {
+        // A proxy or mirror can return an HTML/error body with HTTP 200. PCL
+        // falls through to the next source instead of exposing a generic
+        // response-decoding error to the import flow.
+        log::warn!(
+          "Minecraft version manifest JSON decode failed from {} ({} bytes): {}",
+          url,
+          body.len(),
+          error
+        );
+        continue;
+      }
     };
 
     save_version_list_to_cache(app, &manifest.versions);

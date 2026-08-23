@@ -9,8 +9,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tokio::sync::Semaphore;
 use tauri_plugin_http::reqwest;
+use tokio::sync::Semaphore;
 use zip::ZipArchive;
 
 use crate::instance::helpers::modpack::import::{ModpackManifest, ModpackMetaInfo};
@@ -74,7 +74,11 @@ async fn fetch_curseforge_json<T: DeserializeOwned>(
         Ok(body) => body,
         Err(error) => {
           saw_parse_error = true;
-          log::warn!("CurseForge metadata body decode failed for {}: {}", candidate, error);
+          log::warn!(
+            "CurseForge metadata body decode failed for {}: {}",
+            candidate,
+            error
+          );
           continue;
         }
       };
@@ -280,9 +284,7 @@ impl ModpackManifest for CurseForgeManifest {
         let file_manifest: CurseForgeFileManifest = {
           fetch_curseforge_json(
             &client,
-            &format!(
-              "https://api.curseforge.com/v1/mods/{project_id}/files/{file_id}"
-            ),
+            &format!("https://api.curseforge.com/v1/mods/{project_id}/files/{file_id}"),
             InstanceError::CurseForgeFileManifestParseError,
           )
           .await?

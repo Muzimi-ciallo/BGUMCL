@@ -59,7 +59,9 @@ impl LocalModMetadataParser for LegacyForgeModMetadataParser {
       Err(e) => return Err(BGUMCLError::from(e)),
     };
     if meta.is_empty() {
-      return Err(BGUMCLError("len of LegacyForgeModMetadata is 0".to_string()));
+      return Err(BGUMCLError(
+        "len of LegacyForgeModMetadata is 0".to_string(),
+      ));
     }
     Ok(meta.remove(0))
   }
@@ -75,7 +77,9 @@ impl LocalModMetadataParser for LegacyForgeModMetadataParser {
         Err(e) => return Err(BGUMCLError::from(e)),
       };
     if meta.is_empty() {
-      return Err(BGUMCLError("len of LegacyForgeModMetadata is 0".to_string()));
+      return Err(BGUMCLError(
+        "len of LegacyForgeModMetadata is 0".to_string(),
+      ));
     }
     Ok(meta.remove(0))
   }

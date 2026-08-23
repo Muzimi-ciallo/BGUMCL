@@ -1278,6 +1278,7 @@ pub async fn create_instance(
 
   if let Some(info) = optifine.as_ref() {
     download_optifine_installer(
+      &app,
       &instance.version,
       info,
       libraries_dir.to_path_buf(),
@@ -1698,6 +1699,7 @@ pub async fn change_optifine(
 
   let mut optifine_task_params: Vec<PTaskParam> = Vec::new();
   download_optifine_installer(
+    &app,
     &instance.version,
     &new_optifine,
     libraries_dir.to_path_buf(),

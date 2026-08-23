@@ -40,14 +40,13 @@ where
   T: serde::de::DeserializeOwned,
   P: serde::Serialize,
 {
-  // The official CurseForge API is frequently slow or blocked on mainland
-  // networks. MCIM mirrors the same API path and is already used for file
-  // downloads, so try it first and retain the official API as a fallback.
+  // PCL's default mod source setting starts with the official API and falls
+  // through to MCIM when the response is unavailable or malformed.
   let mut candidates = Vec::with_capacity(2);
+  candidates.push(url.to_string());
   if let Some(mirror) = mcim_mirror_url(url) {
     candidates.push(mirror);
   }
-  candidates.push(url.to_string());
 
   let mut last_error = ResourceError::NetworkError;
   for candidate in candidates {

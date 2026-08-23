@@ -455,4 +455,3 @@ pub enum LauncherConfigError {
 }
 
 impl std::error::Error for LauncherConfigError {}
-

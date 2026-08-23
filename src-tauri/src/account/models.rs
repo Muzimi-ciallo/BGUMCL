@@ -117,8 +117,7 @@ impl Player {
       )
     });
 
-    let fallback_skin =
-      image::RgbaImage::from_pixel(64, 64, image::Rgba([143, 168, 168, 255]));
+    let fallback_skin = image::RgbaImage::from_pixel(64, 64, image::Rgba([143, 168, 168, 255]));
 
     Player {
       id: player_info.id,
@@ -368,4 +367,3 @@ pub enum AccountError {
 }
 
 impl std::error::Error for AccountError {}
-

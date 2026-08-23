@@ -64,7 +64,6 @@ pub fn add_player(app: &AppHandle, new_player: PlayerInfo) -> BGUMCLResult<()> {
     let config_binding = app.state::<Mutex<LauncherConfig>>();
     let mut config_state = config_binding.lock()?;
 
-
     if account_state
       .players
       .iter()

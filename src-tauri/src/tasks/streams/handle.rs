@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::task::{Context, Waker};
+use std::time::Instant;
 use tokio::time::{Duration, Interval, interval};
 
 use crate::tasks::streams::desc::{PDesc, PStatus};
@@ -16,6 +17,8 @@ where
   pub path: PathBuf,
   pub reporter: Reporter<S>,
   pub waker: Option<Waker>,
+  last_direct_report: Instant,
+  last_direct_persist: Instant,
 }
 
 impl<S, P> PHandle<S, P>
@@ -30,6 +33,8 @@ where
       path,
       reporter,
       waker: None,
+      last_direct_report: Instant::now(),
+      last_direct_persist: Instant::now(),
     }
   }
 
@@ -111,7 +116,11 @@ where
 
   fn persist(&self) {
     if let Err(error) = self.desc.save(&self.path) {
-      log::error!("Failed to persist task {} state: {}", self.desc.task_id, error);
+      log::error!(
+        "Failed to persist task {} state: {}",
+        self.desc.task_id,
+        error
+      );
     }
   }
 
@@ -147,12 +156,18 @@ where
       return;
     }
     self.desc.increment_progress(incr);
-    self.persist();
-    self.reporter.report_progress(
-      self.desc.task_id,
-      self.desc.task_group.as_deref(),
-      self.desc.current,
-    );
+    if self.last_direct_persist.elapsed() >= Duration::from_secs(2) {
+      self.persist();
+      self.last_direct_persist = Instant::now();
+    }
+    if self.last_direct_report.elapsed() >= Duration::from_millis(250) {
+      self.reporter.report_progress(
+        self.desc.task_id,
+        self.desc.task_group.as_deref(),
+        self.desc.current,
+      );
+      self.last_direct_report = Instant::now();
+    }
   }
 
   /// Align persisted progress with the bytes already present in a segmented
