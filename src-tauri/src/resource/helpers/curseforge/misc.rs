@@ -12,11 +12,15 @@ use crate::resource::models::{
   OtherResourceRequestType, OtherResourceSearchRes, OtherResourceSource, OtherResourceVersionPack,
   ResourceError,
 };
+use crate::utils::web::mcim_mirror_url;
 
 lazy_static! {
   pub static ref CURSEFORGE_API_KEY: String = {
     env::var("BGUMCL_CURSEFORGE_API_KEY")
-      .unwrap_or_else(|_| env!("BGUMCL_CURSEFORGE_API_KEY").to_string())
+      .ok()
+      .filter(|value| !value.trim().is_empty())
+      .or_else(|| option_env!("BGUMCL_CURSEFORGE_API_KEY").map(str::to_owned))
+      .unwrap_or_default()
   };
 }
 
@@ -36,26 +40,90 @@ where
   T: serde::de::DeserializeOwned,
   P: serde::Serialize,
 {
-  let request_builder = match request_type {
-    OtherResourceRequestType::GetWithParams(params) => client.get(url).query(params),
-    OtherResourceRequestType::Get => client.get(url),
-    OtherResourceRequestType::Post(payload) => client.post(url).json(payload),
-  };
+  // The official CurseForge API is frequently slow or blocked on mainland
+  // networks. MCIM mirrors the same API path and is already used for file
+  // downloads, so try it first and retain the official API as a fallback.
+  let mut candidates = Vec::with_capacity(2);
+  if let Some(mirror) = mcim_mirror_url(url) {
+    candidates.push(mirror);
+  }
+  candidates.push(url.to_string());
 
-  let response = request_builder
-    .header("x-api-key", CURSEFORGE_API_KEY.as_str())
-    .send()
-    .await
-    .map_err(|_| ResourceError::NetworkError)?;
+  let mut last_error = ResourceError::NetworkError;
+  for candidate in candidates {
+    let is_official = candidate == url;
+    for attempt in 0..2 {
+      let mut request_builder = match request_type {
+        OtherResourceRequestType::GetWithParams(params) => client.get(&candidate).query(params),
+        OtherResourceRequestType::Get => client.get(&candidate),
+        OtherResourceRequestType::Post(payload) => client.post(&candidate).json(payload),
+      }
+      .header("Accept", "application/json")
+      .header("Accept-Encoding", "identity");
 
-  if !response.status().is_success() {
-    return Err(ResourceError::NetworkError.into());
+      // The mirror does not need the private API key. Only send it to the
+      // official CurseForge endpoint.
+      if is_official && !CURSEFORGE_API_KEY.is_empty() {
+        request_builder = request_builder.header("x-api-key", CURSEFORGE_API_KEY.as_str());
+      }
+
+      let response = match request_builder.send().await {
+        Ok(response) => response,
+        Err(error) => {
+          log::warn!(
+            "CurseForge request failed (source={}, attempt={}): {}",
+            if is_official { "official" } else { "mcim" },
+            attempt + 1,
+            error
+          );
+          last_error = ResourceError::NetworkError;
+          continue;
+        }
+      };
+
+      let status = response.status();
+      if !status.is_success() {
+        log::warn!(
+          "CurseForge request returned HTTP {} (source={}, attempt={})",
+          status,
+          if is_official { "official" } else { "mcim" },
+          attempt + 1
+        );
+        last_error = ResourceError::NetworkError;
+        continue;
+      }
+
+      let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(error) => {
+          log::warn!(
+            "CurseForge response body read failed (source={}, attempt={}): {}",
+            if is_official { "official" } else { "mcim" },
+            attempt + 1,
+            error
+          );
+          last_error = ResourceError::ParseError;
+          continue;
+        }
+      };
+
+      match serde_json::from_slice::<T>(&body) {
+        Ok(value) => return Ok(value),
+        Err(error) => {
+          log::warn!(
+            "CurseForge response JSON decode failed (source={}, attempt={}, bytes={}): {}",
+            if is_official { "official" } else { "mcim" },
+            attempt + 1,
+            body.len(),
+            error
+          );
+          last_error = ResourceError::ParseError;
+        }
+      }
+    }
   }
 
-  response
-    .json::<T>()
-    .await
-    .map_err(|_| ResourceError::ParseError.into())
+  Err(last_error.into())
 }
 
 pub fn get_curseforge_api(

@@ -61,6 +61,7 @@ impl FromStr for OtherResourceSource {
 
 // Enum to represent different request types
 #[allow(dead_code)]
+#[derive(Clone, Copy)]
 pub enum OtherResourceRequestType<'a, P> {
   GetWithParams(&'a HashMap<String, String>),
   Get,
