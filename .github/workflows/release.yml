@@ -72,6 +72,7 @@ jobs:
 
   Code-Sign-macOS:
     needs: [Version-Check, Build-and-Release]
+    if: ${{ vars.BGUMCL_ENABLE_MACOS_SIGNING == 'true' }}
     uses: ./.github/workflows/sign-macos.yml
     with:
       version: ${{ needs.Version-Check.outputs.version }}
@@ -100,40 +101,13 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Download signed macOS artifacts
-        if: needs.Code-Sign-macOS.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: 'BGUMCL_${{ needs.Version-Check.outputs.version }}_macos_*_signed'
-          path: artifacts-signed
-          merge-multiple: true
-
       - name: Organize release artifacts
         env:
           VERSION: ${{ needs.Version-Check.outputs.version }}
-          SIGNING_SUCCESS: ${{ needs.Code-Sign-macOS.result == 'success' }}
         run: |
           mkdir -p release-artifacts
-          
-          # Copy non-macOS artifacts
-          find artifacts -name "BGUMCL_${{ env.VERSION }}_windows_*" -exec cp {} release-artifacts/ \;
-          find artifacts -name "BGUMCL_${{ env.VERSION }}_linux_*" -exec cp {} release-artifacts/ \;
-          
-          # Copy macOS artifacts (signed if available, unsigned otherwise)
-          if [ "${{ env.SIGNING_SUCCESS }}" = "true" ] && [ -d artifacts-signed ]; then
-            echo "Using signed macOS artifacts"
-            # Copy signed macOS artifacts (rename to remove _signed suffix)
-            find artifacts-signed -name "BGUMCL_${{ env.VERSION }}_macos_*" -type f | while read file; do
-              basename=$(basename "$file")
-              # Remove _signed suffix before the file extension
-              newname=$(echo "$basename" | sed 's/_signed\./\./')
-              cp "$file" "release-artifacts/$newname"
-            done
-          else
-            echo "⚠️ WARNING: Using unsigned macOS artifacts (signing failed or was skipped)"
-            # Copy unsigned macOS artifacts
-            find artifacts -name "BGUMCL_${{ env.VERSION }}_macos_*" -exec cp {} release-artifacts/ \;
-          fi
+          find artifacts -name "BGUMCL_${{ env.VERSION }}_windows_x86_64_portable.exe" -type f -exec cp {} release-artifacts/ \;
+          test -s "release-artifacts/BGUMCL_${{ env.VERSION }}_windows_x86_64_portable.exe"
 
           # Collect all SHA256 files into one summary
           touch SHA256SUMS.txt
@@ -146,13 +120,6 @@ jobs:
             cat "$sha256_file" >> SHA256SUMS.txt
           done
           
-          # Also collect from signed macOS artifacts if available
-          if [ "${{ env.SIGNING_SUCCESS }}" = "true" ] && [ -d artifacts-signed ]; then
-            find artifacts-signed -name "*.sha256" -type f | sort | while read sha256_file; do
-              cat "$sha256_file" >> SHA256SUMS.txt
-            done
-          fi
-
           rm -f release-artifacts/*.sha256
 
           echo ""
@@ -181,19 +148,9 @@ jobs:
 
       - name: Generate Changelog
         id: changelog
-        env:
-          SIGNING_SUCCESS: ${{ needs.Code-Sign-macOS.result == 'success' }}
         run: |
           pip install requests packaging
           python scripts/release/generate_changelog_draft.py > release-notes.md
-          
-          # Add warning if macOS signing failed
-          if [ "${{ env.SIGNING_SUCCESS }}" != "true" ]; then
-            echo "" >> release-notes.md
-            echo "---" >> release-notes.md
-            echo "" >> release-notes.md
-            echo "⚠️ **Note:** macOS artifacts in this release are **not code-signed**. macOS users may see security warnings when running the application." >> release-notes.md
-          fi
         shell: bash
 
       - name: Create Release

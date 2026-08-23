@@ -165,7 +165,7 @@ jobs:
 
   Sign-macOS-Artifacts:
     needs: [Check-and-Prepare, Build-Nightly]
-    if: needs.Check-and-Prepare.outputs.should_build == 'true'
+    if: needs.Check-and-Prepare.outputs.should_build == 'true' && vars.BGUMCL_ENABLE_MACOS_SIGNING == 'true'
     uses: ./.github/workflows/sign-macos.yml
     with:
       version: "nightly_${{ needs.Check-and-Prepare.outputs.nightly_version }}"

@@ -43,6 +43,7 @@ const MAX_DOWNLOAD_SEGMENTS: i64 = 4;
 const SEGMENT_DOWNLOAD_RETRIES: usize = 4;
 const RECOVERY_DOWNLOAD_ATTEMPTS: usize = 3;
 const SOURCE_FAILURE_LIMIT: u8 = 2;
+const SOURCE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(45);
 const BMCLAPI_REQUEST_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -280,9 +281,13 @@ impl DownloadTask {
         }
       }
       candidates.extend(official_candidates);
-    } else if param.src.host_str().is_some_and(|host| {
-      host == "github.com" || host == "raw.githubusercontent.com"
-    }) {
+    } else if {
+      let stripped = crate::utils::web::strip_gh_proxy_prefix(param.src.as_str());
+      stripped != param.src.as_str()
+        || param.src.host_str().is_some_and(|host| {
+          host == "github.com" || host == "raw.githubusercontent.com"
+        })
+    } {
       // GitHub-related downloads: Gitee mirror -> gh-proxy v4 -> cdn -> direct.
       candidates = crate::utils::web::gh_proxy_candidates(param.src.as_str());
     } else {
@@ -394,8 +399,8 @@ impl DownloadTask {
         *last_request = Instant::now();
       }
 
-      match request.send().await {
-        Ok(resp) => match resp.error_for_status() {
+      match tokio::time::timeout(SOURCE_RESPONSE_TIMEOUT, request.send()).await {
+        Ok(Ok(resp)) => match resp.error_for_status() {
           Ok(resp) => {
             // A segmented request must be answered with 206. If a mirror
             // ignores Range, try the next candidate instead of corrupting a
@@ -429,13 +434,20 @@ impl DownloadTask {
             last_err = Some(format!("{:?}", e.source()));
           }
         },
-        Err(e) => {
+        Ok(Err(e)) => {
           if let Ok(mut health) = source_health.lock() {
             let failures = health.entry(candidate.clone()).or_default();
             *failures = failures.saturating_add(1);
           }
           last_err = Some(format!("{:?}", e.source()));
-        }
+        },
+        Err(_) => {
+          if let Ok(mut health) = source_health.lock() {
+            let failures = health.entry(candidate.clone()).or_default();
+            *failures = failures.saturating_add(1);
+          }
+          last_err = Some(format!("{} did not respond within {:?}", candidate, SOURCE_RESPONSE_TIMEOUT));
+        },
       }
     }
     Err(BGUMCLError(

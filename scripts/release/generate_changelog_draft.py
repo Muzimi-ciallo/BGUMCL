@@ -3,8 +3,9 @@ import re
 import os
 from packaging.version import Version
 
-OWNER = "UNIkeEN"
-REPO = "BGUMCL"
+DEFAULT_REPOSITORY = "Muzimi-ciallo/BGUMCL"
+REPOSITORY = os.getenv("GITHUB_REPOSITORY", DEFAULT_REPOSITORY)
+OWNER, REPO = (REPOSITORY.split("/", 1) + ["BGUMCL"])[:2]
 TAG_PATTERN = re.compile(r"^v(.+)$")  # 版本号以v开始
 
 def get_emoji(msg):

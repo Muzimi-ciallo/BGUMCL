@@ -98,7 +98,7 @@ jobs:
           tag = "$TAG"
           data = {
               "version": ver,
-              "base_url": f"https://v4.gh-proxy.org/https://github.com/Muzimi-ciallo/BGUMCL/releases/download/{tag}",
+              "base_url": f"https://github.com/Muzimi-ciallo/BGUMCL/releases/download/{tag}",
               "release_notes": "",
               "published_at": "",
           }
@@ -128,9 +128,9 @@ jobs:
           git checkout main
           git pull --ff-only origin main || true
           git remote add gitee "https://${GITEE_OWNER}:${GITEE_TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_BGUMCL_REPO}.git"
-          if git push gitee main:main 2>&1; then
+          git fetch gitee main
+          if git push --force-with-lease=gitee/main gitee main:main 2>&1; then
             echo "Pushed main to Gitee."
           else
-            echo "Push failed (non-fast-forward); attempting force-with-lease..."
-            git push --force-with-lease gitee main:main 2>&1 || echo "Force push also failed, update.json already handled via API."
+            echo "::warning::Gitee code mirror push failed; update.json was already synchronized via API."
           fi
