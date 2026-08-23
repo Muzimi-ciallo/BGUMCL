@@ -1,6 +1,6 @@
 {
   "name": "bgumcl",
-  "version": "1.3.22",
+  "version": "1.3.23",
   "private": true,
   "browserslist": [
     "Safari >= 14"

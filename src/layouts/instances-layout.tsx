@@ -153,7 +153,7 @@ const InstancesLayout: React.FC<InstancesLayoutProps> = ({ children }) => {
                   if (
                     isInstanceDetailsPage(router.asPath) &&
                     typeof value === "string" &&
-                    !value.startsWith("/instances/")
+                    !value.startsWith("/")
                   ) {
                     // Across instances, keep the current detail tab (preserves the first child segment only, e.g. "settings", rather than a deeper nested path like "settings/advanced")
                     router.push({
@@ -166,7 +166,7 @@ const InstancesLayout: React.FC<InstancesLayoutProps> = ({ children }) => {
                   } else {
                     router.push(
                       typeof value === "string" &&
-                        value.startsWith("/instances/")
+                        value.startsWith("/")
                         ? value
                         : detailsRoute
                     );

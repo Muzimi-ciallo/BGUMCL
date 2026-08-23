@@ -451,6 +451,14 @@ export class InstanceService {
     });
   }
 
+  /** Continue the explicit loader stage after a new instance's base files finish. */
+  @responseHandler("instance")
+  static async continueInstanceCreation(
+    taskGroup: string
+  ): Promise<InvokeResponse<void>> {
+    return await invoke("continue_instance_creation", { taskGroup });
+  }
+
   /**
    * FINISH the mod loader installation.
    * @param {string} instanceId - The ID of the instance to mark the mod loader as installed.

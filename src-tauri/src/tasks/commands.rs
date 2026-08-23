@@ -46,7 +46,12 @@ pub async fn schedule_progressive_task_group(
           Duration::from_secs(1),
         );
         let (f, h) = task
-          .future(app.clone(), monitor.download_rate_limiter.clone())
+          .future(
+            app.clone(),
+            monitor.download_rate_limiter.clone(),
+            monitor.download_connections.clone(),
+            monitor.download_request_gate.clone(),
+          )
           .await?;
         let task_desc = h.read().unwrap().desc.clone();
         let future_desc = BGUMCLFutureDesc {
@@ -125,12 +130,18 @@ pub fn stop_progressive_task(app: AppHandle, task_id: u32) -> BGUMCLResult<()> {
 }
 
 #[tauri::command]
-pub fn cancel_progressive_task_group(app: AppHandle, task_group: String) -> BGUMCLResult<()> {
+pub async fn cancel_progressive_task_group(app: AppHandle, task_group: String) -> BGUMCLResult<()> {
   let monitor = app.state::<Pin<Box<TaskMonitor>>>();
-  // If cancelling an instance-creation download, clean up the leftover
-  // instance directory so the same name can be used again.
+  // Cancel and abort the task handles first.  Cleaning the instance directory
+  // before aborting leaves a race where the still-running download can create
+  // the partial instance files again after cleanup.
+  monitor
+    .cancel_progressive_task_group(task_group.clone())
+    .await;
+  // If cancelling an instance-creation download, remove the leftover
+  // instance directory after all task handles have been aborted so the same
+  // name cannot be rediscovered and restarted by an instance refresh.
   crate::instance::helpers::misc::cleanup_cancelled_instance_creation(&app, &task_group);
-  monitor.cancel_progressive_task_group(task_group);
   Ok(())
 }
 

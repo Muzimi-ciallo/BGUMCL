@@ -79,23 +79,19 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
       (t) => t.status === TaskDescStatusEnums.Completed
     ).length;
 
-    let knownTotalArr = group.taskDescs.filter((t) => t.total && t.total > 0);
-    let knownTotal = knownTotalArr.reduce((acc, t) => acc + t.total, 0);
-    let knownCurrent = knownTotalArr.reduce(
-      (acc, t) => acc + (t.current || 0),
-      0
-    );
-    let estimatedTotal;
-    if (knownTotalArr.length > 0) {
-      estimatedTotal =
-        knownTotal +
-        (group.taskDescs.length - knownTotalArr.length) *
-          (knownTotal / knownTotalArr.length); // Estimate unknown task's size based on known tasks' average size
-    } else {
-      estimatedTotal = knownTotal; // Fallback when no known tasks exist
-    }
-
-    group.progress = estimatedTotal ? (knownCurrent * 100) / estimatedTotal : 0;
+    // The group bar represents file progress, while each individual task bar
+    // represents byte progress. Mixing the two made a group showing 280/283
+    // completed files appear nearly empty when the remaining files were large.
+    const completedProgress = group.taskDescs.reduce((acc, task) => {
+      if (task.status === TaskDescStatusEnums.Completed) return acc + 1;
+      if (task.total > 0) {
+        return acc + Math.min(1, Math.max(0, (task.current || 0) / task.total));
+      }
+      return acc;
+    }, 0);
+    group.progress = group.taskDescs.length
+      ? (completedProgress * 100) / group.taskDescs.length
+      : 0;
 
     group.estimatedTime = undefined;
     group.taskDescs.forEach((t) => {
@@ -188,7 +184,17 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
   const handleCancelProgressiveTaskGroup = useCallback(
     (taskGroup: string) => {
       TaskService.cancelProgressiveTaskGroup(taskGroup).then((response) => {
-        if (response.status !== "success") {
+        if (response.status === "success") {
+          // Remove it immediately so a delayed backend event or a stale
+          // sidebar render cannot expose a cancelled install as resumable.
+          setTasks((prevTasks) =>
+            prevTasks.filter((task) => task.taskGroup !== taskGroup)
+          );
+          // The backend also removes the incomplete instance directory and
+          // its in-memory entry. Refresh the list after that cleanup so the
+          // cancelled instance cannot remain selectable in the UI.
+          getInstanceList(true);
+        } else {
           toast({
             title: response.message,
             description: response.details,
@@ -197,7 +203,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
     },
-    [toast]
+    [getInstanceList, toast]
   );
 
   const handleStopProgressiveTaskGroup = useCallback(
@@ -462,7 +468,22 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
             switch (name) {
               case "game-client":
               case "change-mod-loader":
-                getInstanceList(true);
+                if (name === "game-client") {
+                  InstanceService.continueInstanceCreation(payload.taskGroup).then(
+                    (response) => {
+                      if (response.status === "error") {
+                        toast({
+                          title: response.message,
+                          description: response.details,
+                          status: "error",
+                        });
+                      }
+                      getInstanceList(true);
+                    }
+                  );
+                } else {
+                  getInstanceList(true);
+                }
                 break;
               case "change-optifine":
                 getInstanceList(true);
@@ -471,7 +492,18 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
                 getInstanceList(true);
                 break;
               case "game-client-w-java":
-                getInstanceList(true);
+                InstanceService.continueInstanceCreation(payload.taskGroup).then(
+                  (response) => {
+                    if (response.status === "error") {
+                      toast({
+                        title: response.message,
+                        description: response.details,
+                        status: "error",
+                      });
+                    }
+                    getInstanceList(true);
+                  }
+                );
                 getJavaInfos(true);
                 break;
               case "forge-libraries":

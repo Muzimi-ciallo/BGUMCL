@@ -104,15 +104,16 @@ impl ModpackManifest for MultiMcManifest {
   async fn get_meta_info(&self, app: &AppHandle) -> BGUMCLResult<ModpackMetaInfo> {
     let client_version = self.get_client_version()?;
     let mod_loader = if let Ok((loader_type, version)) = self.get_mod_loader_type_version() {
-      Some(
-        ModLoader {
-          loader_type,
-          version,
-          ..Default::default()
-        }
-        .with_branch(app, client_version.clone())
-        .await?,
-      )
+      let loader = ModLoader {
+        loader_type,
+        version,
+        ..Default::default()
+      };
+      if matches!(loader.loader_type, ModLoaderType::Forge) {
+        Some(loader.with_branch(app, client_version.clone()).await?)
+      } else {
+        Some(loader)
+      }
     } else {
       None
     };

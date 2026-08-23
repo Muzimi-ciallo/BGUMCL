@@ -31,33 +31,173 @@ pub fn get_instance_game_config(app: &AppHandle, instance: &Instance) -> GameCon
   get_global_game_config(app)
 }
 
+/// Exact ownership record for an instance being created by a download task.
+/// This is process-local so a launcher restart never guesses which directory
+/// is safe to remove.
+#[derive(Clone)]
+pub struct PendingInstanceCreation {
+  pub instance: Instance,
+}
+
+pub type PendingInstanceCreationMap = HashMap<String, PendingInstanceCreation>;
+
+pub fn register_pending_instance_creation(
+  app: &AppHandle,
+  task_group: String,
+  instance: Instance,
+) -> BGUMCLResult<()> {
+  let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
+  pending
+    .lock()
+    .map_err(|_| InstanceError::InstanceNotFoundByID)?
+    .insert(task_group, PendingInstanceCreation { instance });
+  Ok(())
+}
+
+/// Continue the explicit second stage of a newly-created instance.  Ordinary
+/// instance refreshes stay read-only; only the successful base-download event
+/// is allowed to start Forge/NeoForge/OptiFine runtime downloads.
+pub async fn continue_instance_creation(
+  app: &AppHandle,
+  task_group: &str,
+) -> BGUMCLResult<()> {
+  let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
+  let Some(record) = pending.lock().ok().and_then(|state| state.get(task_group).cloned()) else {
+    return Ok(());
+  };
+  let mut instance = app
+    .state::<Mutex<HashMap<String, Instance>>>()
+    .lock()
+    .ok()
+    .and_then(|state| state.get(&record.instance.id).cloned())
+    .unwrap_or(record.instance);
+
+  let priority_list = {
+    let config = app.state::<Mutex<LauncherConfig>>();
+    let config = config.lock()?;
+    get_source_priority_list(&config)
+  };
+  let json_path = instance
+    .version_path
+    .join(format!("{}.json", instance.name));
+  let mut client_info = load_json_async::<McClientInfo>(&json_path).await?;
+
+  let needs_loader = matches!(
+    instance.mod_loader.loader_type,
+    ModLoaderType::Forge | ModLoaderType::NeoForge
+  ) && instance.mod_loader.status == ModLoaderStatus::NotDownloaded;
+
+  if needs_loader {
+    instance.mod_loader.status = ModLoaderStatus::Downloading;
+    {
+      let state = app.state::<Mutex<HashMap<String, Instance>>>();
+      state.lock()?.insert(instance.id.clone(), instance.clone());
+    }
+    let result = match instance.mod_loader.loader_type {
+      ModLoaderType::Forge => {
+        download_forge_libraries(app, &priority_list, &instance, &mut client_info).await
+      }
+      ModLoaderType::NeoForge => {
+        download_neoforge_libraries(app, &priority_list, &instance, &mut client_info).await
+      }
+      _ => Ok(()),
+    };
+    if let Err(error) = result {
+      instance.mod_loader.status = ModLoaderStatus::DownloadFailed;
+      let state = app.state::<Mutex<HashMap<String, Instance>>>();
+      state.lock()?.insert(instance.id.clone(), instance.clone());
+      let _ = instance.save_json_cfg().await;
+      return Err(error);
+    }
+    fs::write(&json_path, serde_json::to_vec_pretty(&client_info)?)?;
+    instance.save_json_cfg().await?;
+    return Ok(());
+  }
+
+  let needs_optifine = instance
+    .optifine
+    .as_ref()
+    .is_some_and(|optifine| optifine.status == ModLoaderStatus::NotDownloaded);
+  if needs_optifine {
+    if let Some(optifine) = instance.optifine.as_mut() {
+      optifine.status = ModLoaderStatus::Downloading;
+    }
+    {
+      let state = app.state::<Mutex<HashMap<String, Instance>>>();
+      state.lock()?.insert(instance.id.clone(), instance.clone());
+    }
+    if let Err(error) =
+      download_optifine_libraries(app, &priority_list, &instance, &mut client_info).await
+    {
+      if let Some(optifine) = instance.optifine.as_mut() {
+        optifine.status = ModLoaderStatus::DownloadFailed;
+      }
+      let state = app.state::<Mutex<HashMap<String, Instance>>>();
+      state.lock()?.insert(instance.id.clone(), instance.clone());
+      let _ = instance.save_json_cfg().await;
+      return Err(error);
+    }
+    fs::write(&json_path, serde_json::to_vec_pretty(&client_info)?)?;
+    instance.save_json_cfg().await?;
+  }
+
+  pending.lock()?.remove(task_group);
+  Ok(())
+}
+
+pub async fn continue_pending_instance_by_id(
+  app: &AppHandle,
+  instance_id: &str,
+) -> BGUMCLResult<()> {
+  let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
+  let task_group = pending
+    .lock()?
+    .iter()
+    .find(|(_, record)| record.instance.id == instance_id)
+    .map(|(task_group, _)| task_group.clone());
+  if let Some(task_group) = task_group {
+    continue_instance_creation(app, &task_group).await?;
+  }
+  Ok(())
+}
+
 /// Remove leftover instance directories created by a cancelled
 /// `game-client`/`game-client-w-java` download task, so the same instance name
 /// can be created again (fixes "the directory already contains an instance
 /// with the same name" after cancelling a download).
 pub fn cleanup_cancelled_instance_creation(app: &AppHandle, task_group: &str) {
-  let base = task_group.split('@').next().unwrap_or(task_group);
-  let name = if let Some(n) = base.strip_prefix("game-client-w-java?") {
-    n.split('&').next().map(|s| s.to_string())
-  } else if let Some(n) = base.strip_prefix("game-client?") {
-    Some(n.to_string())
-  } else {
-    None
-  };
-  let Some(name) = name else { return };
-  let binding = app.state::<Mutex<LauncherConfig>>();
-  let Ok(config_binding) = binding.lock() else {
+  let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
+  let Some(record) = pending
+    .lock()
+    .ok()
+    .and_then(|mut state| state.remove(task_group))
+  else {
+    // Never infer a path from a display name: another configured game
+    // directory may contain a completely unrelated instance with that name.
     return;
   };
-  for directory in &config_binding.local_game_directories {
-    let version_path = directory.dir.join("versions").join(&name);
-    if version_path.exists() {
-      let _ = fs::remove_dir_all(&version_path);
+  let removed_path = record.instance.version_path;
+  if removed_path.exists() {
+    if let Err(error) = fs::remove_dir_all(&removed_path) {
+      log::warn!(
+        "Failed to remove incomplete instance directory after cancellation {:?}: {}",
+        removed_path,
+        error
+      );
+    } else {
       log::info!(
         "Removed incomplete instance directory after cancelled creation: {:?}",
-        version_path
+        removed_path
       );
     }
+  }
+
+  // `create_instance` registers the instance in the in-memory map before the
+  // next list refresh. Remove that entry as well; otherwise a stale summary
+  // can still be clicked after the directory has already been deleted.
+  let instances = app.state::<Mutex<HashMap<String, Instance>>>();
+  if let Ok(mut state) = instances.lock() {
+    state.remove(&record.instance.id);
   }
 }
 
@@ -199,45 +339,60 @@ async fn refresh_instance(
       get_source_priority_list(&launcher_config)
     };
     if let Err(e) = {
-      match cfg_read.mod_loader.status {
-        ModLoaderStatus::NotDownloaded => {
-          match cfg_read.mod_loader.loader_type {
+      // Refreshing the instance list must be read-only.  In particular, do
+      // not turn a stale NotDownloaded/DownloadFailed state into a new
+      // download merely because the user clicked an instance.  Automatic
+      // recovery is limited to the initial launcher scan; later retries must
+      // come from an explicit user action.
+      if !is_first_run
+        && matches!(
+          cfg_read.mod_loader.status,
+          ModLoaderStatus::NotDownloaded | ModLoaderStatus::DownloadFailed
+        )
+      {
+        Ok(())
+      } else {
+        match cfg_read.mod_loader.status {
+          ModLoaderStatus::NotDownloaded => {
+            match cfg_read.mod_loader.loader_type {
+              ModLoaderType::Forge => {
+                cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
+                download_forge_libraries(app, &priority_list, &cfg_read, &mut client_data).await?;
+              }
+              ModLoaderType::NeoForge => {
+                cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
+                download_neoforge_libraries(app, &priority_list, &cfg_read, &mut client_data)
+                  .await?;
+              }
+              _ => {}
+            }
+            let vjson_path = cfg_read
+              .version_path
+              .join(format!("{}.json", cfg_read.name));
+            fs::write(vjson_path, serde_json::to_vec_pretty(&client_data)?)?;
+
+            Ok(())
+          }
+          ModLoaderStatus::DownloadFailed => match cfg_read.mod_loader.loader_type {
             ModLoaderType::Forge => {
               cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
-              download_forge_libraries(app, &priority_list, &cfg_read, &mut client_data).await?;
+              download_forge_libraries(app, &priority_list, &cfg_read, &mut client_data).await
             }
             ModLoaderType::NeoForge => {
               cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
-              download_neoforge_libraries(app, &priority_list, &cfg_read, &mut client_data).await?;
+              download_neoforge_libraries(app, &priority_list, &cfg_read, &mut client_data).await
             }
-            _ => {}
+            _ => Ok(()),
+          },
+          ModLoaderStatus::Downloading | ModLoaderStatus::Installing => {
+            if is_first_run {
+              // The instance failed to install mod loader during last run.
+              cfg_read.mod_loader.status = ModLoaderStatus::DownloadFailed;
+            }
+            Ok(())
           }
-          let vjson_path = cfg_read
-            .version_path
-            .join(format!("{}.json", cfg_read.name));
-          fs::write(vjson_path, serde_json::to_vec_pretty(&client_data)?)?;
-
-          Ok(())
+          ModLoaderStatus::Installed => Ok(()),
         }
-        ModLoaderStatus::DownloadFailed => match cfg_read.mod_loader.loader_type {
-          ModLoaderType::Forge => {
-            cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
-            download_forge_libraries(app, &priority_list, &cfg_read, &mut client_data).await
-          }
-          ModLoaderType::NeoForge => {
-            cfg_read.mod_loader.status = ModLoaderStatus::Downloading;
-            download_neoforge_libraries(app, &priority_list, &cfg_read, &mut client_data).await
-          }
-          _ => Ok(()),
-        },
-        ModLoaderStatus::Downloading | ModLoaderStatus::Installing => {
-          if is_first_run {
-            // The instance failed to install mod loader during last run.
-            cfg_read.mod_loader.status = ModLoaderStatus::DownloadFailed;
-          }
-          Ok(())
-        }
-        ModLoaderStatus::Installed => Ok(()),
       }
     } {
       log::warn!("Failed to install mod loader for {}: {:?}", name, e);
@@ -258,32 +413,43 @@ async fn refresh_instance(
       get_source_priority_list(&launcher_config)
     };
     if let Err(e) = {
-      match cfg_read.optifine.as_ref().unwrap().status {
-        ModLoaderStatus::Downloading | ModLoaderStatus::Installing => {
-          if is_first_run {
-            // The instance failed to install OptiFine during last run.
-            if let Some(optifine_cfg) = &mut cfg_read.optifine {
-              optifine_cfg.status = ModLoaderStatus::DownloadFailed;
+      // As with Forge, an ordinary instance refresh must not restart an
+      // OptiFine download.  Only the initial scan may perform recovery.
+      if !is_first_run
+        && matches!(
+          cfg_read.optifine.as_ref().unwrap().status,
+          ModLoaderStatus::NotDownloaded | ModLoaderStatus::DownloadFailed
+        )
+      {
+        Ok(())
+      } else {
+        match cfg_read.optifine.as_ref().unwrap().status {
+          ModLoaderStatus::Downloading | ModLoaderStatus::Installing => {
+            if is_first_run {
+              // The instance failed to install OptiFine during last run.
+              if let Some(optifine_cfg) = &mut cfg_read.optifine {
+                optifine_cfg.status = ModLoaderStatus::DownloadFailed;
+              }
             }
+            Ok(())
           }
-          Ok(())
-        }
-        ModLoaderStatus::NotDownloaded => {
-          cfg_read.optifine.as_mut().unwrap().status = ModLoaderStatus::Downloading;
-          download_optifine_libraries(app, &priority_list, &cfg_read, &mut client_data).await?;
+          ModLoaderStatus::NotDownloaded => {
+            cfg_read.optifine.as_mut().unwrap().status = ModLoaderStatus::Downloading;
+            download_optifine_libraries(app, &priority_list, &cfg_read, &mut client_data).await?;
 
-          let vjson_path = cfg_read
-            .version_path
-            .join(format!("{}.json", cfg_read.name));
-          fs::write(vjson_path, serde_json::to_vec_pretty(&client_data)?)?;
+            let vjson_path = cfg_read
+              .version_path
+              .join(format!("{}.json", cfg_read.name));
+            fs::write(vjson_path, serde_json::to_vec_pretty(&client_data)?)?;
 
-          Ok(())
+            Ok(())
+          }
+          ModLoaderStatus::DownloadFailed => {
+            cfg_read.optifine.as_mut().unwrap().status = ModLoaderStatus::Downloading;
+            download_optifine_libraries(app, &priority_list, &cfg_read, &mut client_data).await
+          }
+          ModLoaderStatus::Installed => Ok(()),
         }
-        ModLoaderStatus::DownloadFailed => {
-          cfg_read.optifine.as_mut().unwrap().status = ModLoaderStatus::Downloading;
-          download_optifine_libraries(app, &priority_list, &cfg_read, &mut client_data).await
-        }
-        ModLoaderStatus::Installed => Ok(()),
       }
     } {
       log::warn!("Failed to install OptiFine for {}: {:?}", name, e);

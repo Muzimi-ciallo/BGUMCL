@@ -35,7 +35,7 @@ where
 
   pub fn mark_stopped(&mut self) {
     self.desc.stop();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     self
       .reporter
       .report_stopped(self.desc.task_id, self.desc.task_group.as_deref());
@@ -43,7 +43,7 @@ where
 
   pub fn mark_resumed(&mut self) {
     self.desc.resume();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     self.reporter.report_started(
       self.desc.task_id,
       self.desc.task_group.as_deref(),
@@ -57,8 +57,11 @@ where
   }
 
   pub fn mark_cancelled(&mut self) {
+    if self.desc.status.is_cancelled() {
+      return;
+    }
     self.desc.cancel();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     // Terminal tasks no longer need to be restored on restart; remove the
     // saved descriptor so stale entries do not pile up in the cache.
     let _ = std::fs::remove_file(&self.path);
@@ -69,7 +72,7 @@ where
 
   pub fn mark_completed(&mut self) {
     self.desc.complete();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     // Terminal tasks no longer need to be restored on restart; remove the
     // saved descriptor so stale entries do not pile up in the cache.
     let _ = std::fs::remove_file(&self.path);
@@ -80,7 +83,7 @@ where
 
   pub fn mark_started(&mut self) {
     self.desc.start();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     self.reporter.report_started(
       self.desc.task_id,
       self.desc.task_group.as_deref(),
@@ -89,8 +92,11 @@ where
   }
 
   pub fn mark_failed(&mut self, reason: String) {
+    if self.desc.status.is_cancelled() || self.desc.status.is_completed() {
+      return;
+    }
     self.desc.fail();
-    self.desc.save(&self.path).unwrap();
+    self.persist();
     // Terminal tasks no longer need to be restored on restart; remove the
     // saved descriptor so stale entries do not pile up in the cache.
     let _ = std::fs::remove_file(&self.path);
@@ -103,6 +109,12 @@ where
     &self.desc.status
   }
 
+  fn persist(&self) {
+    if let Err(error) = self.desc.save(&self.path) {
+      log::error!("Failed to persist task {} state: {}", self.desc.task_id, error);
+    }
+  }
+
   pub fn store_waker(&mut self, waker: Waker) {
     self.waker = Some(waker);
   }
@@ -110,7 +122,7 @@ where
   pub fn set_total(&mut self, total: i64) {
     if total > self.desc.total {
       self.desc.total = total;
-      self.desc.save(&self.path).unwrap();
+      self.persist();
       self.reporter.set_total(total);
     }
   }
@@ -118,12 +130,41 @@ where
   pub fn report_progress(&mut self, cx: &mut Context<'_>, incr: i64) {
     self.desc.increment_progress(incr);
     if self.interval.poll_tick(cx).is_ready() {
-      self.desc.save(&self.path).unwrap();
+      self.persist();
       self.reporter.report_progress(
         self.desc.task_id,
         self.desc.task_group.as_deref(),
         self.desc.current,
       );
     }
+  }
+
+  /// Report progress from code that is not polling a `ProgressStream`.
+  /// Segmented downloads have several response streams, so the first
+  /// completed segment must not mark the whole task as completed.
+  pub fn report_progress_now(&mut self, incr: i64) {
+    if incr <= 0 {
+      return;
+    }
+    self.desc.increment_progress(incr);
+    self.persist();
+    self.reporter.report_progress(
+      self.desc.task_id,
+      self.desc.task_group.as_deref(),
+      self.desc.current,
+    );
+  }
+
+  /// Align persisted progress with the bytes already present in a segmented
+  /// download cache. This prevents a restarted task from reporting progress
+  /// from an earlier strategy (for example, single-stream resume) twice.
+  pub fn set_current(&mut self, current: i64) {
+    self.desc.current = current.max(0);
+    self.persist();
+    self.reporter.report_progress(
+      self.desc.task_id,
+      self.desc.task_group.as_deref(),
+      self.desc.current,
+    );
   }
 }

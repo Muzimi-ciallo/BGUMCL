@@ -163,8 +163,7 @@ pub fn github_to_gitee(url: &str) -> Option<String> {
 /// workflows. Non-GitHub URLs are returned unchanged so unrelated downloads
 /// are not routed through a proxy.
 pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
-  let is_github =
-    url.contains("github.com") || url.contains("raw.githubusercontent.com");
+  let is_github = url.contains("github.com") || url.contains("raw.githubusercontent.com");
   if !is_github {
     return vec![url.to_string()];
   }
@@ -175,7 +174,8 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   let scheme_less = if had_prefix {
     stripped
   } else {
-    url.strip_prefix("https://")
+    url
+      .strip_prefix("https://")
       .or_else(|| url.strip_prefix("http://"))
       .unwrap_or(url)
       .to_string()
@@ -200,6 +200,130 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
   out
 }
 
+/// Build mainland-China candidates for Minecraft's official download hosts.
+///
+/// This follows PCL's source selection strategy: use BMCLAPI first for
+/// Mojang metadata, libraries, and assets, then keep the official URL as a
+/// fallback.  The path prefixes are important because BMCLAPI exposes the
+/// same files through separate `/maven`, `/libraries`, and `/assets` trees.
+fn push_bmcl_candidate(candidates: &mut Vec<String>, parsed: &Url, path: &str) {
+  let mut candidate = parsed.clone();
+  if candidate.set_host(Some("bmclapi2.bangbang93.com")).is_err() {
+    return;
+  }
+  candidate.set_path(path);
+  let candidate = candidate.to_string();
+  if !candidates.contains(&candidate) {
+    candidates.push(candidate);
+  }
+}
+
+pub fn minecraft_download_candidates(url: &str) -> Vec<String> {
+  let parsed = match Url::parse(url) {
+    Ok(url) => url,
+    Err(_) => return vec![url.to_string()],
+  };
+  let host = match parsed.host_str() {
+    Some(host) => host,
+    None => return vec![url.to_string()],
+  };
+
+  let mut candidates = Vec::new();
+  if host == "bmclapi2.bangbang93.com" {
+    let path = parsed.path();
+    if let Some(rest) = path.strip_prefix("/maven") {
+      // Forge/Fabric/NeoForge library URLs are converted to BMCLAPI before
+      // they reach the downloader. Keep the original Maven families as
+      // fallbacks instead of losing the only working source.
+      candidates.push(url.to_string());
+      let mut add_maven_candidate = |host: &str, prefix: &str| {
+        let mut candidate = parsed.clone();
+        if candidate.set_host(Some(host)).is_ok() {
+          candidate.set_path(&format!("{prefix}{rest}"));
+          let candidate = candidate.to_string();
+          if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+          }
+        }
+      };
+      if rest.starts_with("/net/minecraftforge/") {
+        add_maven_candidate("files.minecraftforge.net", "/maven");
+        add_maven_candidate("maven.minecraftforge.net", "");
+      } else if rest.starts_with("/net/neoforged/") {
+        add_maven_candidate("maven.neoforged.net", "/releases");
+      } else if rest.starts_with("/net/fabricmc/") {
+        add_maven_candidate("maven.fabricmc.net", "");
+      } else if rest.starts_with("/org/quiltmc/") {
+        add_maven_candidate("maven.quiltmc.org", "/repository/release");
+      } else {
+        add_maven_candidate("libraries.minecraft.net", "");
+      }
+      return candidates;
+    }
+    if let Some(rest) = path.strip_prefix("/assets") {
+      candidates.push(url.to_string());
+      let mut candidate = parsed.clone();
+      if candidate.set_host(Some("resources.download.minecraft.net")).is_ok() {
+        candidate.set_path(rest);
+        candidates.push(candidate.to_string());
+      }
+      return candidates;
+    }
+  }
+
+  match host {
+    // Keep the original Maven repository as a fallback, but do not discard
+    // its identity before the downloader can choose a mirror. This matters
+    // for Forge's third-party libraries, which are not all hosted by
+    // libraries.minecraft.net.
+    "files.minecraftforge.net" => {
+      let path = parsed.path().strip_prefix("/maven").unwrap_or(parsed.path());
+      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{path}"));
+    }
+    "maven.minecraftforge.net" => {
+      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{}", parsed.path()));
+    }
+    "maven.neoforged.net" => {
+      let path = parsed.path().strip_prefix("/releases").unwrap_or(parsed.path());
+      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{path}"));
+    }
+    "maven.fabricmc.net"
+    | "maven.quiltmc.org"
+    | "repo1.maven.org"
+    | "repo.maven.apache.org" => {
+      push_bmcl_candidate(&mut candidates, &parsed, &format!("/maven{}", parsed.path()));
+    }
+    // PCL maps these asset URLs to BMCLAPI's assets tree.
+    "resources.download.minecraft.net" => {
+      push_bmcl_candidate(&mut candidates, &parsed, &format!("/assets{}", parsed.path()));
+    }
+    // Libraries are available from both BMCLAPI Maven trees.  The first is
+    // the usual fast path; the second covers files mirrored only in the
+    // libraries tree.
+    "libraries.minecraft.net" => {
+      push_bmcl_candidate(
+        &mut candidates,
+        &parsed,
+        &format!("/maven{}", parsed.path()),
+      );
+      push_bmcl_candidate(
+        &mut candidates,
+        &parsed,
+        &format!("/libraries{}", parsed.path()),
+      );
+    }
+    // Metadata and launcher files preserve their original path on BMCLAPI.
+    "piston-data.mojang.com"
+    | "piston-meta.mojang.com"
+    | "launchermeta.mojang.com"
+    | "launcher.mojang.com" => push_bmcl_candidate(&mut candidates, &parsed, parsed.path()),
+    _ => return vec![url.to_string()],
+  }
+
+  candidates.push(url.to_string());
+  candidates
+}
+
 /// Map a CurseForge / Modrinth URL to its MCIM mirror
 /// (https://mod.mcimirror.top). MCIM mirrors the official Modrinth /
 /// CurseForge API and CDNs on fast mainland-China servers, which makes
@@ -211,6 +335,7 @@ pub fn gh_proxy_candidates(url: &str) -> Vec<String> {
 ///   cdn.modrinth.com        -> mod.mcimirror.top
 ///   api.curseforge.com      -> mod.mcimirror.top/curseforge
 ///   edge.forgecdn.net       -> mod.mcimirror.top
+///   media.forgecdn.net     -> mod.mcimirror.top
 ///   mediafilez.forgecdn.net -> mod.mcimirror.top
 ///
 /// Returns None for URLs that are not mirrored, so callers can fall back to
@@ -223,7 +348,7 @@ pub fn mcim_mirror_url(url: &str) -> Option<String> {
 
   // Keep the path for pure CDN host swaps; add a prefix for the API hosts.
   let new_path = match host {
-    "cdn.modrinth.com" | "edge.forgecdn.net" | "mediafilez.forgecdn.net" => {
+    "cdn.modrinth.com" | "edge.forgecdn.net" | "media.forgecdn.net" | "mediafilez.forgecdn.net" => {
       path.to_string()
     }
     "api.modrinth.com" => format!("/modrinth{}", path),
@@ -231,8 +356,7 @@ pub fn mcim_mirror_url(url: &str) -> Option<String> {
     _ => return None,
   };
 
-  let mut mirror = Url::parse(&format!("https://mod.mcimirror.top{}", new_path))
-    .ok()?;
+  let mut mirror = Url::parse(&format!("https://mod.mcimirror.top{}", new_path)).ok()?;
   if let Some(q) = query {
     mirror.set_query(Some(q));
   }

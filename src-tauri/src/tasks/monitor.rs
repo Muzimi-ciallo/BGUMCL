@@ -5,15 +5,16 @@ use log::info;
 use sjmcl_types::error::{BGUMCLError, BGUMCLResult};
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 use std::vec::Vec;
 use tauri::AppHandle;
 use tauri::async_runtime::JoinHandle;
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 use crate::launcher_config::commands::retrieve_launcher_config;
-use crate::tasks::download::DownloadTask;
+use crate::tasks::download::{DownloadTask, RequestGate};
 use crate::tasks::events::{GEvent, GEventStatus, PEvent, TEvent};
 use crate::tasks::streams::desc::PStatus;
 use crate::tasks::{BGUMCLFuture, *};
@@ -35,12 +36,19 @@ pub struct TaskMonitor {
   group_map: Arc<RwLock<HashMap<String, GroupMonitor>>>,
   stopped_futures: Arc<Mutex<Vec<BGUMCLFuture>>>,
   pub download_rate_limiter: Option<Limiter>,
+  pub download_connections: Arc<Semaphore>,
+  pub download_request_gate: RequestGate,
 }
 
 impl TaskMonitor {
   pub fn new(app_handle: AppHandle) -> Self {
     let config = retrieve_launcher_config(app_handle.clone()).unwrap();
     let (tx, rx) = flume::unbounded();
+    let download_connection_count = if config.download.transmission.auto_concurrent {
+      32
+    } else {
+      config.download.transmission.concurrent_count.clamp(1, 64)
+    };
     TaskMonitor {
       app_handle: app_handle.clone(),
       id_counter: AtomicU32::new(0),
@@ -49,7 +57,14 @@ impl TaskMonitor {
       tasks: Arc::new(Mutex::new(HashMap::new())),
       concurrency: Arc::new(Semaphore::new(
         if config.download.transmission.auto_concurrent {
-          std::thread::available_parallelism().unwrap().into()
+          // Downloads are I/O-bound. Limiting automatic concurrency to the
+          // CPU count leaves large modpacks waiting behind hundreds of small
+          // files, unlike PCL's download worker pool. Keep a bounded pool so
+          // this does not turn into an unbounded connection storm.
+          let cpu_count = std::thread::available_parallelism()
+            .map(|count| count.get())
+            .unwrap_or(4);
+          (cpu_count.saturating_mul(4)).clamp(8, 32)
         } else {
           config.download.transmission.concurrent_count
         },
@@ -65,6 +80,13 @@ impl TaskMonitor {
       } else {
         None
       },
+      // This semaphore limits actual HTTP streams, including segmented
+      // ranges. The task semaphore above limits task scheduling only; keeping
+      // these separate prevents one large file from multiplying connections.
+      download_connections: Arc::new(Semaphore::new(download_connection_count)),
+      download_request_gate: Arc::new(AsyncMutex::new(
+        Instant::now() - std::time::Duration::from_millis(100),
+      )),
     }
   }
 
@@ -113,6 +135,8 @@ impl TaskMonitor {
             }
             let task_id = desc.task_id;
             let task_group = desc.task_group.clone();
+            self.id_counter
+              .fetch_max(task_id.saturating_add(1), Ordering::SeqCst);
             match desc.payload {
               PTaskParam::Download(_) => {
                 let task = DownloadTask::from_descriptor(
@@ -122,7 +146,12 @@ impl TaskMonitor {
                   false,
                 );
                 let (f, p_handle) = task
-                  .future(self.app_handle.clone(), self.download_rate_limiter.clone())
+                  .future(
+                    self.app_handle.clone(),
+                    self.download_rate_limiter.clone(),
+                    self.download_connections.clone(),
+                    self.download_request_gate.clone(),
+                  )
                   .await
                   .unwrap();
                 self.enqueue_task(task_id, task_group, f, p_handle).await;
@@ -189,7 +218,9 @@ impl TaskMonitor {
       let mut p_handle = p_handle.write().unwrap();
 
       if let Err(e) = result {
-        p_handle.mark_failed(e.0);
+        let reason = e.0;
+        p_handle.mark_failed(reason.clone());
+        return Err(BGUMCLError(reason));
       }
 
       Ok(())
@@ -246,7 +277,9 @@ impl TaskMonitor {
         let result = future.f.await;
         let mut p_handle = future.h.write().unwrap();
         if let Err(e) = result {
-          p_handle.mark_failed(e.0);
+          let reason = e.0;
+          p_handle.mark_failed(reason.clone());
+          return Err(BGUMCLError(reason));
         }
         Ok(())
       });
@@ -265,18 +298,11 @@ impl TaskMonitor {
   pub async fn background_process(&self) {
     loop {
       let future = self.rx.recv_async().await.unwrap();
-      if self
-        .phs
-        .read()
-        .unwrap()
-        .get(&future.task_id)
-        .unwrap()
-        .read()
-        .unwrap()
-        .desc
-        .status
-        .is_cancelled()
-      {
+      let Some(handle) = self.phs.read().unwrap().get(&future.task_id).cloned() else {
+        // The group may have been cancelled while this future was queued.
+        continue;
+      };
+      if handle.read().unwrap().desc.status.is_cancelled() {
         continue;
       }
       // Check if the task group is stopped before acquiring permit
@@ -342,13 +368,31 @@ impl TaskMonitor {
               info!("Task failed: {e:?}");
               if let Some(group_name) = future.task_group {
                 GEvent::emit_group_failed(&app, &group_name);
-                if let Some(group) = group_map.write().unwrap().remove(&group_name) {
-                  for (_, handle) in group.phs {
-                    let mut handle = handle.write().unwrap();
-                    if handle.desc.status.is_waiting() {
-                      handle.mark_cancelled()
-                    }
+                let sibling_handles = group_map
+                  .write()
+                  .unwrap()
+                  .remove(&group_name)
+                  .map(|group| group.phs.into_iter().collect::<Vec<_>>())
+                  .unwrap_or_default();
+                let mut joins = Vec::new();
+                for (task_id, handle) in sibling_handles {
+                  if task_id == future.task_id {
+                    continue;
                   }
+                  let mut handle_guard = handle.write().unwrap();
+                  if handle_guard.desc.status.is_waiting()
+                    || handle_guard.desc.status.is_in_progress()
+                  {
+                    handle_guard.mark_cancelled();
+                  }
+                  drop(handle_guard);
+                  if let Some(join_handle) = tasks.lock().unwrap().remove(&task_id) {
+                    join_handle.abort();
+                    joins.push(join_handle);
+                  }
+                }
+                for join_handle in joins {
+                  let _ = join_handle.await;
                 }
               }
             }
@@ -401,7 +445,12 @@ impl TaskMonitor {
             true,
           );
           let (f, new_h) = task
-            .future(self.app_handle.clone(), self.download_rate_limiter.clone())
+            .future(
+              self.app_handle.clone(),
+              self.download_rate_limiter.clone(),
+              self.download_connections.clone(),
+              self.download_request_gate.clone(),
+            )
             .await
             .unwrap();
           self.enqueue_task(id, task_group, f, new_h).await;
@@ -431,8 +480,19 @@ impl TaskMonitor {
     self.ths.read().unwrap().get(&task_id).cloned()
   }
 
-  pub fn cancel_progressive_task_group(&self, task_group: String) {
-    if let Some(group) = self.group_map.write().unwrap().remove(&task_group) {
+  pub async fn cancel_progressive_task_group(&self, task_group: String) {
+    // A stopped group may have futures waiting in `stopped_futures`. Removing
+    // the group alone is not enough: a stale resume request could otherwise
+    // re-submit those futures after cancellation and start the download again.
+    self
+      .stopped_futures
+      .lock()
+      .unwrap()
+      .retain(|future| future.task_group.as_deref() != Some(task_group.as_str()));
+
+    let group = { self.group_map.write().unwrap().remove(&task_group) };
+    if let Some(group) = group {
+      let mut joins = Vec::new();
       for handle in group.phs.values() {
         handle.write().unwrap().mark_cancelled();
         if let Some(join_handle) = self
@@ -442,7 +502,11 @@ impl TaskMonitor {
           .remove(&handle.read().unwrap().desc.task_id)
         {
           join_handle.abort();
+          joins.push(join_handle);
         }
+      }
+      for join_handle in joins {
+        let _ = join_handle.await;
       }
       GEvent::emit_group_cancelled(&self.app_handle, &task_group);
     }
@@ -462,7 +526,14 @@ impl TaskMonitor {
   }
 
   pub async fn resume_progressive_task_group(&self, task_group: String) {
-    if let Some(group) = self.group_map.write().unwrap().get_mut(&task_group) {
+    {
+      let mut group_map = self.group_map.write().unwrap();
+      let Some(group) = group_map.get_mut(&task_group) else {
+        // Cancellation removes the group. A delayed UI event must not be able
+        // to resurrect its queued futures.
+        return;
+      };
+
       group.status = GEventStatus::Started;
 
       // Resume existing stopped tasks
@@ -565,10 +636,7 @@ impl TaskMonitor {
           return Err(BGUMCLError(format!("Task group failed: {}", task_group)));
         }
         GEventStatus::Cancelled => {
-          return Err(BGUMCLError(format!(
-            "Task group cancelled: {}",
-            task_group
-          )));
+          return Err(BGUMCLError(format!("Task group cancelled: {}", task_group)));
         }
         GEventStatus::Started | GEventStatus::Stopped => {}
       }

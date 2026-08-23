@@ -1,5 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
+use sanitize_filename;
 use regex::{Regex, RegexBuilder};
 use sjmcl_types::error::BGUMCLResult;
 use sjmcl_types::partial::{PartialError, PartialUpdate};
@@ -1062,24 +1063,17 @@ pub async fn create_instance(
     )
   };
 
-  // Ensure the instance name is unique. A directory can be left behind when an
-  // instance download was interrupted (launcher closed mid-download, task
-  // cancelled, etc.). Only treat it as a real conflict if it is a completed,
-  // valid instance (has both `name.jar` and `name.json`); otherwise remove the
-  // stale partial directory so the same name can be created again.
+  if name.is_empty() || !sanitize_filename::is_sanitized(&name) {
+    return Err(InstanceError::InvalidNameError.into());
+  }
+
+  // An existing directory is never safe to recursively remove here: it may
+  // contain saves, mods, or user-created files even when the two launcher
+  // metadata files are missing. A cancelled creation is cleaned up only by
+  // the exact in-memory ownership record after its task has stopped.
   let version_path = directory.dir.join("versions").join(&name);
   if version_path.exists() {
-    let jar_path = version_path.join(format!("{}.jar", name));
-    let json_path = version_path.join(format!("{}.json", name));
-    if jar_path.exists() && json_path.exists() {
-      return Err(InstanceError::ConflictNameError.into());
-    }
-    log::info!(
-      "Removing leftover incomplete instance directory before re-creation: {:?}",
-      version_path
-    );
-    fs::remove_dir_all(&version_path)
-      .map_err(|_| InstanceError::FolderCreationFailed)?;
+    return Err(InstanceError::ConflictNameError.into());
   }
 
   // Guard removes version_path on any early return (errors), fix #1105 #1310
@@ -1122,15 +1116,63 @@ pub async fn create_instance(
     modpack_update_channel: None,
   };
 
-  // Download version info
-  let mut version_info = client
-    .get(&game.url)
-    .send()
-    .await
-    .map_err(|_| InstanceError::NetworkError)?
-    .json::<McClientInfo>()
-    .await
-    .map_err(|_| InstanceError::ClientJsonParseError)?;
+  // Download version info through the same mainland mirror candidates as
+  // ordinary Minecraft files. Read bytes first so a truncated/compressed
+  // response can be retried on the next source instead of surfacing the raw
+  // reqwest error "error decoding response body" to the UI.
+  let mut version_info = None;
+  let mut saw_version_parse_error = false;
+  for candidate in crate::utils::web::minecraft_download_candidates(&game.url) {
+    let response = match client
+      .get(&candidate)
+      .header("accept", "application/json")
+      .header("accept-encoding", "identity")
+      .send()
+      .await
+    {
+      Ok(response) if response.status().is_success() => response,
+      Ok(response) => {
+        log::warn!(
+          "Minecraft version metadata source returned {}: {}",
+          response.status(),
+          candidate
+        );
+        continue;
+      }
+      Err(error) => {
+        log::warn!("Minecraft version metadata request failed for {}: {}", candidate, error);
+        continue;
+      }
+    };
+    let body = match response.bytes().await {
+      Ok(body) => body,
+      Err(error) => {
+        saw_version_parse_error = true;
+        log::warn!("Minecraft version metadata body failed for {}: {}", candidate, error);
+        continue;
+      }
+    };
+    match serde_json::from_slice::<McClientInfo>(&body) {
+      Ok(parsed) => {
+        version_info = Some(parsed);
+        break;
+      }
+      Err(error) => {
+        saw_version_parse_error = true;
+        log::warn!(
+          "Minecraft version metadata JSON parse failed for {} ({} bytes): {}",
+          candidate,
+          body.len(),
+          error
+        );
+      }
+    }
+  }
+  let mut version_info = version_info.ok_or(if saw_version_parse_error {
+    InstanceError::ClientJsonParseError
+  } else {
+    InstanceError::NetworkError
+  })?;
 
   version_info.id = name.clone();
   version_info.jar = Some(name.clone());
@@ -1245,17 +1287,6 @@ pub async fn create_instance(
     extract_overrides(&file, &version_path)?;
   }
 
-  schedule_progressive_task_group(
-    app.clone(),
-    match java_version_to_download {
-      Some(java_version) => format!("game-client-w-java?{}&{}", name, java_version),
-      None => format!("game-client?{}", name),
-    },
-    task_params,
-    true,
-  )
-  .await?;
-
   // Optionally skip first-screen options by adding options.txt.
   let (language, skip_first_screen_options) = {
     let launcher_config = launcher_config_state.lock()?;
@@ -1295,8 +1326,47 @@ pub async fn create_instance(
     state.insert(instance.id.clone(), instance.clone());
   }
 
+  // Persist all instance metadata before scheduling any asynchronous work. If
+  // scheduling itself fails, the state entry and directory are rolled back by
+  // this function's explicit error path and the guard below.
+  let task_group = match java_version_to_download {
+    Some(java_version) => format!("game-client-w-java?{}&{}", name, java_version),
+    None => format!("game-client?{}", name),
+  };
+  let task_desc = match schedule_progressive_task_group(
+    app.clone(),
+    task_group,
+    task_params,
+    true,
+  )
+  .await
+  {
+    Ok(desc) => desc,
+    Err(error) => {
+      let binding = app.state::<Mutex<HashMap<String, Instance>>>();
+      if let Ok(mut state) = binding.lock() {
+        state.remove(&instance.id);
+      }
+      return Err(error);
+    }
+  };
+
+  crate::instance::helpers::misc::register_pending_instance_creation(
+    &app,
+    task_desc.task_group,
+    instance.clone(),
+  )?;
+
   dir_guard.commit();
   Ok(())
+}
+
+#[tauri::command]
+pub async fn continue_instance_creation(
+  app: AppHandle,
+  task_group: String,
+) -> BGUMCLResult<()> {
+  crate::instance::helpers::misc::continue_instance_creation(&app, &task_group).await
 }
 
 #[tauri::command]
@@ -1351,6 +1421,7 @@ pub async fn finish_mod_loader_install(app: AppHandle, instance_id: String) -> B
     instance.clone()
   };
   instance.save_json_cfg().await?;
+  crate::instance::helpers::misc::continue_pending_instance_by_id(&app, &instance_id).await?;
 
   Ok(())
 }
@@ -1408,6 +1479,7 @@ pub async fn finish_optifine_loader_install(
     instance.clone()
   };
   instance.save_json_cfg().await?;
+  crate::instance::helpers::misc::continue_pending_instance_by_id(&app, &instance_id).await?;
 
   Ok(())
 }
@@ -1696,23 +1768,57 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
   // proxies do not throttle us and large files are not cut off.
   let client = crate::tasks::download::download_client().clone();
 
-  // Try accelerated mirrors (v4 -> cdn) then the direct GitHub API, so this
-  // works even in regions where one proxy is unreachable.
-  let api_candidates = crate::utils::web::gh_proxy_candidates(
+  // GitHub file proxies are not API proxies: they may return an HTML page or
+  // a compressed error body with HTTP 200. Query the real APIs only, then use
+  // the Gitee release attachment as the file-level mainland fallback.
+  let api_candidates = [
+    "https://gitee.com/api/v5/repos/Muzimimiao/BBGU-Minecraft-sever/releases/latest",
     "https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
-  );
+  ];
 
   let mut json: Option<serde_json::Value> = None;
   for api_url in &api_candidates {
-    let Ok(resp) = client.get(api_url).send().await else {
-      continue;
+    let response = match client
+      .get(*api_url)
+      .header("accept", "application/vnd.github+json")
+      .header("x-github-api-version", "2022-11-28")
+      .send()
+      .await
+    {
+      Ok(response) => response,
+      Err(error) => {
+        log::warn!("Wanda release API request failed for {}: {:?}", api_url, error);
+        continue;
+      }
     };
-    let Ok(resp) = resp.error_for_status() else {
+    if !response.status().is_success() {
+      log::warn!(
+        "Wanda release API returned {} for {}",
+        response.status(),
+        api_url
+      );
       continue;
+    }
+    let body = match response.bytes().await {
+      Ok(body) => body,
+      Err(error) => {
+        log::warn!("Wanda release API body failed for {}: {:?}", api_url, error);
+        continue;
+      }
     };
-    if let Ok(parsed) = resp.json::<serde_json::Value>().await {
-      json = Some(parsed);
-      break;
+    match serde_json::from_slice::<serde_json::Value>(&body) {
+      Ok(parsed) if parsed.get("assets").and_then(|value| value.as_array()).is_some() => {
+        json = Some(parsed);
+        break;
+      }
+      Ok(_) => {
+        log::warn!("Wanda release API returned JSON without assets: {}", api_url);
+      }
+      Err(error) => {
+        // Some acceleration endpoints return a successful HTML error page.
+        // Treat it as a bad candidate and continue with the next source.
+        log::warn!("Wanda release API returned non-JSON from {}: {:?}", api_url, error);
+      }
     }
   }
 
@@ -1751,6 +1857,8 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       .to_string();
     let url = asset
       .get("browser_download_url")
+      .or_else(|| asset.get("download_url"))
+      .or_else(|| asset.get("url"))
       .and_then(|u| u.as_str())
       .ok_or(InstanceError::NetworkError)?;
     // gh_proxy_candidates already adds the Gitee release mirror for GitHub
@@ -1773,15 +1881,18 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     .map_err(|_| InstanceError::NetworkError)?;
   fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
   let dest = dest_dir.join(&name);
+  let temp_dest = dest.with_extension("download");
   let mut downloaded = false;
   for candidate in &candidates {
     let Ok(resp) = client.get(candidate).send().await else {
       continue;
     };
-    let Ok(resp) = resp.error_for_status() else {
+    if !resp.status().is_success() {
+      log::warn!("Wanda asset source returned {}: {}", resp.status(), candidate);
       continue;
-    };
-    let mut file = match tokio::fs::File::create(&dest).await {
+    }
+    let _ = tokio::fs::remove_file(&temp_dest).await;
+    let mut file = match tokio::fs::File::create(&temp_dest).await {
       Ok(f) => f,
       Err(_) => return Err(InstanceError::FileCreationFailed.into()),
     };
@@ -1803,11 +1914,38 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
         }
       }
     }
-    if ok {
+    if ok && file.flush().await.is_ok() {
+      drop(file);
+      let archive_path = temp_dest.clone();
+      let valid_archive = tokio::task::spawn_blocking(move || {
+        let archive_file = std::fs::File::open(archive_path).ok()?;
+        let mut archive = ZipArchive::new(archive_file).ok()?;
+        let has_modrinth_manifest = archive.by_name("modrinth.index.json").is_ok();
+        let has_curseforge_manifest = archive.by_name("manifest.json").is_ok();
+        Some(has_modrinth_manifest || has_curseforge_manifest)
+      })
+      .await
+      .ok()
+      .flatten()
+      .unwrap_or(false);
+      if !valid_archive {
+        log::warn!("Wanda asset is not a valid modpack archive: {}", candidate);
+        let _ = tokio::fs::remove_file(&temp_dest).await;
+        continue;
+      }
+      if tokio::fs::try_exists(&dest).await.unwrap_or(false) {
+        let _ = tokio::fs::remove_file(&dest).await;
+      }
+      if tokio::fs::rename(&temp_dest, &dest).await.is_err() {
+        let _ = tokio::fs::remove_file(&temp_dest).await;
+        continue;
+      }
       downloaded = true;
       break;
     }
+    let _ = tokio::fs::remove_file(&temp_dest).await;
   }
+  let _ = tokio::fs::remove_file(&temp_dest).await;
   if !downloaded {
     return Err(InstanceError::NetworkError.into());
   }

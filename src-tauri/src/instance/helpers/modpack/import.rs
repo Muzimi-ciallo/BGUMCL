@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sjmcl_types::error::BGUMCLResult;
 use std::fs;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Component, Path};
 use tauri::AppHandle;
 use zip::ZipArchive;
 
@@ -29,6 +29,26 @@ pub trait ModpackManifest {
     instance_path: &Path,
   ) -> BGUMCLResult<Vec<PTaskParam>>;
   fn get_overrides_path(&self) -> String;
+  fn get_override_paths(&self) -> Vec<String> {
+    vec![self.get_overrides_path()]
+  }
+}
+
+pub(crate) fn is_safe_relative_modpack_path(path: &str) -> bool {
+  if path.is_empty()
+    || path.starts_with('/')
+    || path.starts_with('\\')
+    || path.as_bytes().get(1) == Some(&b':')
+  {
+    return false;
+  }
+
+  !Path::new(path).components().any(|component| {
+    matches!(
+      component,
+      Component::Prefix(_) | Component::RootDir | Component::ParentDir
+    )
+  })
 }
 
 type ManifestBox = Box<dyn ModpackManifest + Send + Sync>;
@@ -110,36 +130,40 @@ pub async fn get_download_params(
 }
 
 pub fn extract_overrides(file: &File, instance_path: &Path) -> BGUMCLResult<()> {
-  let get_overrides_path = |file| {
+  let get_override_paths = |file| {
     for parser in get_parsers() {
       if let Ok(manifest) = parser(file) {
-        return Some(manifest.get_overrides_path());
+        return Some(manifest.get_override_paths());
       }
     }
     None
   };
-  let overrides_path = get_overrides_path(file).ok_or(InstanceError::ModpackManifestParseError)?;
+  let override_paths = get_override_paths(file).ok_or(InstanceError::ModpackManifestParseError)?;
   let mut archive = ZipArchive::new(file)?;
-  for i in 0..archive.len() {
-    let mut file = archive.by_index(i)?;
-    let path = file.mangled_name();
-    let outpath = if path.starts_with(format!("{}/", overrides_path)) {
-      // Remove "{overrides}/" prefix and join with instance path
-      let relative_path = path.strip_prefix(format!("{}/", overrides_path)).unwrap();
-      instance_path.join(relative_path)
-    } else {
+  for override_path in override_paths {
+    let prefix = override_path.trim_matches(['/', '\\']);
+    if prefix.is_empty() {
       continue;
-    };
+    }
 
-    if file.is_file() {
-      // Create parent directories if they don't exist
-      if let Some(p) = outpath.parent()
-        && !p.exists()
-      {
-        fs::create_dir_all(p)?;
+    for i in 0..archive.len() {
+      let mut file = archive.by_index(i)?;
+      let archive_path = file.name().replace('\\', "/");
+      let prefix_with_separator = format!("{prefix}/");
+      let Some(relative_path) = archive_path.strip_prefix(&prefix_with_separator) else {
+        continue;
+      };
+      if !is_safe_relative_modpack_path(relative_path) || !file.is_file() {
+        continue;
       }
 
-      // Extract file
+      let outpath = instance_path.join(relative_path);
+      if let Some(parent) = outpath.parent()
+        && !parent.exists()
+      {
+        fs::create_dir_all(parent)?;
+      }
+
       let mut outfile = File::create(&outpath)?;
       std::io::copy(&mut file, &mut outfile)?;
     }
