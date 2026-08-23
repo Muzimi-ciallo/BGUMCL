@@ -3049,6 +3049,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "湾大 Modpack のダウンロードが完了しました",
+        "error": {
+          "title": "湾大 Modpack のダウンロードに失敗しました",
+          "description": {
+            "NETWORK_ERROR": "すべてのダウンロード元への接続に失敗しました。ネットワークを確認して再試行してください",
+            "MODPACK_MANIFEST_PARSE_ERROR": "サーバーのリリースに有効な Modpack が含まれていません",
+            "FILE_CREATION_FAILED": "ダウンロードした Modpack を保存できませんでした"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "エクスポート可能なファイル一覧の取得に失敗"

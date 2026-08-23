@@ -3049,6 +3049,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "Modpack Wanda téléchargé",
+        "error": {
+          "title": "Échec du téléchargement du modpack Wanda",
+          "description": {
+            "NETWORK_ERROR": "Toutes les sources de téléchargement ont échoué ; vérifiez votre connexion et réessayez",
+            "MODPACK_MANIFEST_PARSE_ERROR": "La version publiée par le serveur ne contient aucun modpack valide",
+            "FILE_CREATION_FAILED": "Impossible d’enregistrer le modpack téléchargé"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "Échec de la récupération de la liste des fichiers exportables"

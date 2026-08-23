@@ -3052,6 +3052,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "Wanda modpack downloaded",
+        "error": {
+          "title": "Failed to download the Wanda modpack",
+          "description": {
+            "NETWORK_ERROR": "All download sources failed; check your connection and try again",
+            "MODPACK_MANIFEST_PARSE_ERROR": "The server release does not contain a valid modpack",
+            "FILE_CREATION_FAILED": "Failed to save the downloaded modpack"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "Failed to retrieve exportable file list"
