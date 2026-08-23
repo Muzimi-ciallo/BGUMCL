@@ -962,7 +962,10 @@ impl DownloadTask {
             // File::create truncates any existing partial file when restarting.
             tokio::fs::File::create(&self.dest_path).await?
           } else {
-            let mut f = tokio::fs::OpenOptions::new().open(&self.dest_path).await?;
+            let mut f = tokio::fs::OpenOptions::new()
+              .write(true)
+              .open(&self.dest_path)
+              .await?;
             f.seek(std::io::SeekFrom::Start(effective_current as u64))
               .await?;
             f
