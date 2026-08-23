@@ -3049,6 +3049,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "灣大模組包下載既成",
+        "error": {
+          "title": "下載灣大模組包未果",
+          "description": {
+            "NETWORK_ERROR": "諸下載源皆不可達，請察網路而復試",
+            "MODPACK_MANIFEST_PARSE_ERROR": "伺服器所發之包內無可用模組包",
+            "FILE_CREATION_FAILED": "不能存所下載之模組包"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "獲取可錄出案列表未成"

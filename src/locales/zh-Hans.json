@@ -3053,6 +3053,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "湾大整合包下载完成",
+        "error": {
+          "title": "下载湾大整合包失败",
+          "description": {
+            "NETWORK_ERROR": "所有下载源均连接失败，请检查网络后重试",
+            "MODPACK_MANIFEST_PARSE_ERROR": "服务器发布包中未找到有效的整合包文件",
+            "FILE_CREATION_FAILED": "无法保存下载的整合包文件"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "获取可导出文件列表失败"

@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
-use sanitize_filename;
 use regex::{Regex, RegexBuilder};
+use sanitize_filename;
 use sjmcl_types::error::BGUMCLResult;
 use sjmcl_types::partial::{PartialError, PartialUpdate};
 use sjmcl_types::storage::{Storage, load_json_async, save_json_async};
@@ -17,7 +17,6 @@ use tokio;
 use tokio::sync::Semaphore;
 use url::Url;
 use zip::read::ZipArchive;
-
 
 use crate::instance::helpers::client_json::{
   McClientInfo, remove_mod_loader_from_client_info, remove_optifine_from_client_info,
@@ -1140,7 +1139,11 @@ pub async fn create_instance(
         continue;
       }
       Err(error) => {
-        log::warn!("Minecraft version metadata request failed for {}: {}", candidate, error);
+        log::warn!(
+          "Minecraft version metadata request failed for {}: {}",
+          candidate,
+          error
+        );
         continue;
       }
     };
@@ -1148,7 +1151,11 @@ pub async fn create_instance(
       Ok(body) => body,
       Err(error) => {
         saw_version_parse_error = true;
-        log::warn!("Minecraft version metadata body failed for {}: {}", candidate, error);
+        log::warn!(
+          "Minecraft version metadata body failed for {}: {}",
+          candidate,
+          error
+        );
         continue;
       }
     };
@@ -1333,23 +1340,17 @@ pub async fn create_instance(
     Some(java_version) => format!("game-client-w-java?{}&{}", name, java_version),
     None => format!("game-client?{}", name),
   };
-  let task_desc = match schedule_progressive_task_group(
-    app.clone(),
-    task_group,
-    task_params,
-    true,
-  )
-  .await
-  {
-    Ok(desc) => desc,
-    Err(error) => {
-      let binding = app.state::<Mutex<HashMap<String, Instance>>>();
-      if let Ok(mut state) = binding.lock() {
-        state.remove(&instance.id);
+  let task_desc =
+    match schedule_progressive_task_group(app.clone(), task_group, task_params, true).await {
+      Ok(desc) => desc,
+      Err(error) => {
+        let binding = app.state::<Mutex<HashMap<String, Instance>>>();
+        if let Ok(mut state) = binding.lock() {
+          state.remove(&instance.id);
+        }
+        return Err(error);
       }
-      return Err(error);
-    }
-  };
+    };
 
   crate::instance::helpers::misc::register_pending_instance_creation(
     &app,
@@ -1362,10 +1363,7 @@ pub async fn create_instance(
 }
 
 #[tauri::command]
-pub async fn continue_instance_creation(
-  app: AppHandle,
-  task_group: String,
-) -> BGUMCLResult<()> {
+pub async fn continue_instance_creation(app: AppHandle, task_group: String) -> BGUMCLResult<()> {
   crate::instance::helpers::misc::continue_instance_creation(&app, &task_group).await
 }
 
@@ -1762,6 +1760,238 @@ pub async fn retrieve_modpack_meta_info(
   ModpackMetaInfo::from_archive(&app, &file).await
 }
 
+const MAX_NESTED_WANDA_MODPACK_SIZE: u64 = 2 * 1024 * 1024 * 1024;
+
+#[derive(Debug)]
+enum WandaArchiveError {
+  InvalidFormat,
+  Io(std::io::Error),
+}
+
+impl From<std::io::Error> for WandaArchiveError {
+  fn from(error: std::io::Error) -> Self {
+    Self::Io(error)
+  }
+}
+
+impl From<zip::result::ZipError> for WandaArchiveError {
+  fn from(error: zip::result::ZipError) -> Self {
+    match error {
+      zip::result::ZipError::Io(error) => Self::Io(error),
+      _ => Self::InvalidFormat,
+    }
+  }
+}
+
+fn wanda_archive_has_manifest(archive: &mut ZipArchive<fs::File>) -> bool {
+  let has_modrinth_manifest = archive.by_name("modrinth.index.json").is_ok();
+  let has_curseforge_manifest = archive.by_name("manifest.json").is_ok();
+  has_modrinth_manifest || has_curseforge_manifest
+}
+
+fn safe_wanda_asset_name(asset_name: &str) -> String {
+  let file_name = Path::new(asset_name)
+    .file_name()
+    .and_then(|name| name.to_str())
+    .unwrap_or("wanda-server-modpack.zip");
+  let sanitized = sanitize_filename::sanitize(file_name);
+  if sanitized.is_empty() {
+    "wanda-server-modpack.zip".to_string()
+  } else {
+    sanitized
+  }
+}
+
+fn finalize_wanda_archive(
+  downloaded_path: &Path,
+  asset_name: &str,
+  dest_dir: &Path,
+) -> Result<PathBuf, WandaArchiveError> {
+  let archive_file = fs::File::open(downloaded_path)?;
+  let mut archive = ZipArchive::new(archive_file)?;
+  let safe_asset_name = safe_wanda_asset_name(asset_name);
+
+  if wanda_archive_has_manifest(&mut archive) {
+    let destination = dest_dir.join(safe_asset_name);
+    drop(archive);
+    if destination.exists() {
+      fs::remove_file(&destination)?;
+    }
+    fs::rename(downloaded_path, &destination)?;
+    return Ok(destination);
+  }
+
+  let mut nested_mrpack_index: Option<usize> = None;
+  for index in 0..archive.len() {
+    let entry = archive.by_index(index)?;
+    let is_mrpack = !entry.is_dir()
+      && Path::new(entry.name())
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("mrpack"))
+        .unwrap_or(false);
+    if is_mrpack {
+      if nested_mrpack_index.is_some() {
+        return Err(WandaArchiveError::InvalidFormat);
+      }
+      nested_mrpack_index = Some(index);
+    }
+  }
+
+  let nested_mrpack_index = nested_mrpack_index.ok_or(WandaArchiveError::InvalidFormat)?;
+  let outer_stem = Path::new(&safe_asset_name)
+    .file_stem()
+    .and_then(|stem| stem.to_str())
+    .filter(|stem| !stem.is_empty())
+    .unwrap_or("wanda-server-modpack");
+  let nested_name = format!("{}.mrpack", outer_stem);
+  let nested_destination = dest_dir.join(&nested_name);
+  let nested_temp = dest_dir.join(format!("{}.download", nested_name));
+  if nested_temp.exists() {
+    fs::remove_file(&nested_temp)?;
+  }
+
+  {
+    let mut nested_entry = archive.by_index(nested_mrpack_index)?;
+    if nested_entry.size() == 0 || nested_entry.size() > MAX_NESTED_WANDA_MODPACK_SIZE {
+      return Err(WandaArchiveError::InvalidFormat);
+    }
+    let mut nested_file = fs::File::create(&nested_temp)?;
+    std::io::copy(&mut nested_entry, &mut nested_file)?;
+    nested_file.sync_all()?;
+  }
+  drop(archive);
+
+  let nested_archive_file = fs::File::open(&nested_temp)?;
+  let mut nested_archive = match ZipArchive::new(nested_archive_file) {
+    Ok(archive) => archive,
+    Err(_) => {
+      let _ = fs::remove_file(&nested_temp);
+      return Err(WandaArchiveError::InvalidFormat);
+    }
+  };
+  if !wanda_archive_has_manifest(&mut nested_archive) {
+    drop(nested_archive);
+    let _ = fs::remove_file(&nested_temp);
+    return Err(WandaArchiveError::InvalidFormat);
+  }
+  drop(nested_archive);
+
+  if nested_destination.exists() {
+    fs::remove_file(&nested_destination)?;
+  }
+  fs::rename(&nested_temp, &nested_destination)?;
+  let _ = fs::remove_file(downloaded_path);
+  Ok(nested_destination)
+}
+
+fn wanda_release_asset(json: &serde_json::Value) -> Option<(String, String)> {
+  let assets = json.get("assets")?.as_array()?;
+  for extension in ["mrpack", "zip"] {
+    for asset in assets {
+      let Some(name) = asset.get("name").and_then(|value| value.as_str()) else {
+        continue;
+      };
+      let Some(url) = asset
+        .get("browser_download_url")
+        .or_else(|| asset.get("download_url"))
+        .or_else(|| asset.get("url"))
+        .and_then(|value| value.as_str())
+      else {
+        continue;
+      };
+      let matches_extension = Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case(extension))
+        .unwrap_or(false);
+      if matches_extension && !url.contains("/archive/refs/tags/") {
+        return Some((name.to_string(), url.to_string()));
+      }
+    }
+  }
+  None
+}
+
+#[cfg(test)]
+mod wanda_modpack_tests {
+  use super::*;
+  use std::io::{Cursor, Write};
+  use zip::ZipWriter;
+  use zip::write::FileOptions;
+
+  fn zip_bytes(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let cursor = Cursor::new(Vec::new());
+    let mut writer = ZipWriter::new(cursor);
+    for (name, content) in entries {
+      writer
+        .start_file(*name, FileOptions::<()>::default())
+        .unwrap();
+      writer.write_all(content).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+  }
+
+  fn test_dir(name: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+      .duration_since(SystemTime::UNIX_EPOCH)
+      .unwrap()
+      .as_nanos();
+    std::env::temp_dir().join(format!(
+      "bgumcl-wanda-{}-{}-{}",
+      name,
+      std::process::id(),
+      nonce
+    ))
+  }
+
+  #[test]
+  fn extracts_and_validates_nested_mrpack() {
+    let dir = test_dir("nested");
+    fs::create_dir_all(&dir).unwrap();
+    let inner = zip_bytes(&[("modrinth.index.json", br#"{"name":"test"}"#)]);
+    let outer = zip_bytes(&[
+      ("modpack.mrpack", inner.as_slice()),
+      ("Plain Craft Launcher.exe", b"ignored"),
+    ]);
+    let downloaded = dir.join("wrapper.zip.download");
+    fs::write(&downloaded, outer).unwrap();
+
+    let result =
+      finalize_wanda_archive(&downloaded, "Construct Technological Innovation.zip", &dir).unwrap();
+
+    assert_eq!(
+      result.file_name().and_then(|name| name.to_str()),
+      Some("Construct Technological Innovation.mrpack")
+    );
+    assert!(!downloaded.exists());
+    let result_file = fs::File::open(&result).unwrap();
+    let mut archive = ZipArchive::new(result_file).unwrap();
+    assert!(wanda_archive_has_manifest(&mut archive));
+    drop(archive);
+    fs::remove_dir_all(&dir).unwrap();
+  }
+
+  #[test]
+  fn ignores_generated_source_archives() {
+    let release = serde_json::json!({
+      "assets": [
+        {
+          "name": "1.1.0.zip",
+          "browser_download_url": "https://gitee.com/example/repo/archive/refs/tags/1.1.0.zip"
+        },
+        {
+          "name": "Construct Technological Innovation.zip",
+          "browser_download_url": "https://gitee.com/example/repo/releases/download/1.1.0/pack.zip"
+        }
+      ]
+    });
+
+    let asset = wanda_release_asset(&release).unwrap();
+    assert_eq!(asset.0, "Construct Technological Innovation.zip");
+  }
+}
+
 #[tauri::command]
 pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
   // Use the dedicated download client (browser User-Agent + long timeout) so
@@ -1776,7 +2006,9 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     "https://api.github.com/repos/Muzimi-ciallo/BBGU-Minecraft-sever/releases/latest",
   ];
 
-  let mut json: Option<serde_json::Value> = None;
+  let mut release_assets: Vec<(String, String)> = Vec::new();
+  let mut best_release_version: Option<semver::Version> = None;
+  let mut saw_release_response = false;
   for api_url in &api_candidates {
     let response = match client
       .get(*api_url)
@@ -1787,7 +2019,11 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     {
       Ok(response) => response,
       Err(error) => {
-        log::warn!("Wanda release API request failed for {}: {:?}", api_url, error);
+        log::warn!(
+          "Wanda release API request failed for {}: {:?}",
+          api_url,
+          error
+        );
         continue;
       }
     };
@@ -1807,64 +2043,73 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       }
     };
     match serde_json::from_slice::<serde_json::Value>(&body) {
-      Ok(parsed) if parsed.get("assets").and_then(|value| value.as_array()).is_some() => {
-        json = Some(parsed);
-        break;
+      Ok(parsed)
+        if parsed
+          .get("assets")
+          .and_then(|value| value.as_array())
+          .is_some() =>
+      {
+        saw_release_response = true;
+        let Some(asset) = wanda_release_asset(&parsed) else {
+          log::warn!("Wanda release has no importable asset: {}", api_url);
+          continue;
+        };
+        let release_version = parsed
+          .get("tag_name")
+          .and_then(|value| value.as_str())
+          .and_then(|value| semver::Version::parse(value.trim_start_matches('v')).ok());
+
+        match (&best_release_version, &release_version) {
+          (Some(best), Some(current)) if current < best => continue,
+          (Some(best), Some(current)) if current > best => {
+            release_assets.clear();
+            best_release_version = Some(current.clone());
+          }
+          (None, Some(current)) => {
+            release_assets.clear();
+            best_release_version = Some(current.clone());
+          }
+          (Some(_), None) => continue,
+          _ => {}
+        }
+        if !release_assets.iter().any(|(_, url)| url == &asset.1) {
+          release_assets.push(asset);
+        }
       }
       Ok(_) => {
-        log::warn!("Wanda release API returned JSON without assets: {}", api_url);
+        log::warn!(
+          "Wanda release API returned JSON without assets: {}",
+          api_url
+        );
       }
       Err(error) => {
         // Some acceleration endpoints return a successful HTML error page.
         // Treat it as a bad candidate and continue with the next source.
-        log::warn!("Wanda release API returned non-JSON from {}: {:?}", api_url, error);
+        log::warn!(
+          "Wanda release API returned non-JSON from {}: {:?}",
+          api_url,
+          error
+        );
       }
     }
   }
 
-  // Decide which file to download. Prefer the latest GitHub release asset;
-  // if the GitHub API is unreachable (e.g. some regions of China), fall back
-  // to the mrpack hosted on the Gitee release (Gitee repo files are limited to
-  // 50 MB, so the modpack is distributed as a Gitee release attachment).
-  let (name, candidates): (String, Vec<String>) = if let Some(json) = json {
-    let asset = json
-      .get("assets")
-      .and_then(|v| v.as_array())
-      .and_then(|assets| {
-        // Prefer a Modrinth .mrpack; fall back to a CurseForge .zip.
-        assets
-          .iter()
-          .find(|a| {
-            a.get("name")
-              .and_then(|n| n.as_str())
-              .map(|n| n.ends_with(".mrpack"))
-              .unwrap_or(false)
-          })
-          .or_else(|| {
-            assets.iter().find(|a| {
-              a.get("name")
-                .and_then(|n| n.as_str())
-                .map(|n| n.ends_with(".zip"))
-                .unwrap_or(false)
-            })
-          })
-      })
-      .ok_or(InstanceError::NetworkError)?;
-    let name = asset
-      .get("name")
-      .and_then(|n| n.as_str())
-      .unwrap_or("wanda-server-modpack.mrpack")
-      .to_string();
-    let url = asset
-      .get("browser_download_url")
-      .or_else(|| asset.get("download_url"))
-      .or_else(|| asset.get("url"))
-      .and_then(|u| u.as_str())
-      .ok_or(InstanceError::NetworkError)?;
-    // gh_proxy_candidates already adds the Gitee release mirror for GitHub
-    // release download URLs, so both GitHub (v4/cdn/direct) and Gitee are tried.
-    let candidates = crate::utils::web::gh_proxy_candidates(&url);
+  // Use every API that reports the newest release. This keeps the real Gitee
+  // attachment first while retaining GitHub proxy/direct fallbacks when the
+  // Gitee file service is temporarily unavailable.
+  let (name, candidates): (String, Vec<String>) = if !release_assets.is_empty() {
+    let name = release_assets[0].0.clone();
+    let mut candidates = Vec::new();
+    for (_, url) in release_assets {
+      for candidate in crate::utils::web::gh_proxy_candidates(&url) {
+        if !candidates.contains(&candidate) {
+          candidates.push(candidate);
+        }
+      }
+    }
     (name, candidates)
+  } else if saw_release_response {
+    return Err(InstanceError::ModpackManifestParseError.into());
   } else {
     // GitHub API unreachable: use the known mrpack on the Gitee release.
     let name = "Fabulously.Optimized-v6.5.0.mrpack".to_string();
@@ -1880,15 +2125,19 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     .resolve::<PathBuf>("Download".into(), BaseDirectory::AppCache)
     .map_err(|_| InstanceError::NetworkError)?;
   fs::create_dir_all(&dest_dir).map_err(|_| InstanceError::FileCreationFailed)?;
-  let dest = dest_dir.join(&name);
-  let temp_dest = dest.with_extension("download");
-  let mut downloaded = false;
+  let temp_dest = dest_dir.join(format!("{}.download", safe_wanda_asset_name(&name)));
+  let mut saw_invalid_archive = false;
+  let mut saw_file_error = false;
   for candidate in &candidates {
     let Ok(resp) = client.get(candidate).send().await else {
       continue;
     };
     if !resp.status().is_success() {
-      log::warn!("Wanda asset source returned {}: {}", resp.status(), candidate);
+      log::warn!(
+        "Wanda asset source returned {}: {}",
+        resp.status(),
+        candidate
+      );
       continue;
     }
     let _ = tokio::fs::remove_file(&temp_dest).await;
@@ -1917,40 +2166,47 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     if ok && file.flush().await.is_ok() {
       drop(file);
       let archive_path = temp_dest.clone();
-      let valid_archive = tokio::task::spawn_blocking(move || {
-        let archive_file = std::fs::File::open(archive_path).ok()?;
-        let mut archive = ZipArchive::new(archive_file).ok()?;
-        let has_modrinth_manifest = archive.by_name("modrinth.index.json").is_ok();
-        let has_curseforge_manifest = archive.by_name("manifest.json").is_ok();
-        Some(has_modrinth_manifest || has_curseforge_manifest)
+      let asset_name = name.clone();
+      let archive_dest_dir = dest_dir.clone();
+      match tokio::task::spawn_blocking(move || {
+        finalize_wanda_archive(&archive_path, &asset_name, &archive_dest_dir)
       })
       .await
-      .ok()
-      .flatten()
-      .unwrap_or(false);
-      if !valid_archive {
-        log::warn!("Wanda asset is not a valid modpack archive: {}", candidate);
-        let _ = tokio::fs::remove_file(&temp_dest).await;
-        continue;
+      {
+        Ok(Ok(destination)) => {
+          return Ok(destination.to_string_lossy().to_string());
+        }
+        Ok(Err(WandaArchiveError::InvalidFormat)) => {
+          saw_invalid_archive = true;
+          log::warn!("Wanda asset is not a valid modpack archive: {}", candidate);
+        }
+        Ok(Err(WandaArchiveError::Io(error))) => {
+          saw_file_error = true;
+          log::warn!(
+            "Wanda asset finalization failed for {}: {:?}",
+            candidate,
+            error
+          );
+        }
+        Err(error) => {
+          log::warn!(
+            "Wanda asset validation task failed for {}: {:?}",
+            candidate,
+            error
+          );
+        }
       }
-      if tokio::fs::try_exists(&dest).await.unwrap_or(false) {
-        let _ = tokio::fs::remove_file(&dest).await;
-      }
-      if tokio::fs::rename(&temp_dest, &dest).await.is_err() {
-        let _ = tokio::fs::remove_file(&temp_dest).await;
-        continue;
-      }
-      downloaded = true;
-      break;
     }
     let _ = tokio::fs::remove_file(&temp_dest).await;
   }
   let _ = tokio::fs::remove_file(&temp_dest).await;
-  if !downloaded {
-    return Err(InstanceError::NetworkError.into());
+  if saw_invalid_archive {
+    return Err(InstanceError::ModpackManifestParseError.into());
   }
-
-  Ok(dest.to_string_lossy().to_string())
+  if saw_file_error {
+    return Err(InstanceError::FileCreationFailed.into());
+  }
+  Err(InstanceError::NetworkError.into())
 }
 #[tauri::command]
 pub fn add_custom_instance_icon(

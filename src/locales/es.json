@@ -3049,6 +3049,17 @@
           }
         }
       },
+      "downloadWandaModpack": {
+        "success": "Paquete de mods de Wanda descargado",
+        "error": {
+          "title": "No se pudo descargar el paquete de mods de Wanda",
+          "description": {
+            "NETWORK_ERROR": "Fallaron todas las fuentes de descarga; comprueba la conexión e inténtalo de nuevo",
+            "MODPACK_MANIFEST_PARSE_ERROR": "La versión del servidor no contiene un paquete de mods válido",
+            "FILE_CREATION_FAILED": "No se pudo guardar el paquete de mods descargado"
+          }
+        }
+      },
       "retrieveExportableFileList": {
         "error": {
           "title": "Error al obtener la lista de archivos exportables"
