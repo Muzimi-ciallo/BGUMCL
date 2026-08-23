@@ -1,6 +1,6 @@
 <div align="center">
 
-![BGUMCL](docs/figs/banner.png)
+
 
 # BGUMCL
 
