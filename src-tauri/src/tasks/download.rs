@@ -447,11 +447,12 @@ impl DownloadTask {
         }
       }
       official.dedup();
-      let mirror_first = app_handle
-        .state::<Mutex<LauncherConfig>>()
-        .lock()
-        .ok()
-        .is_some_and(|config| config.download.source.strategy == "mirror");
+      // Keep the API for metadata discovery independent from file delivery.
+      // CurseForge's official CDN is often slow or intermittently reachable
+      // from mainland China, while MCIM is the fast path used by PCL-style
+      // downloads. Always try the mirror first for the file itself; retain
+      // the official CDN variants as a fallback.
+      let mirror_first = true;
       let mut candidates = Vec::new();
       if mirror_first {
         candidates.extend(mirrors);

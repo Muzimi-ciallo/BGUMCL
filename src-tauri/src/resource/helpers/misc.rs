@@ -1,6 +1,5 @@
 use sjmcl_types::error::BGUMCLResult;
 use std::cmp::Ordering;
-use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 use url::Url;
 
@@ -9,73 +8,6 @@ use crate::resource::models::{
   OtherResourceInfo, OtherResourceVersionPack, ResourceError, ResourceType, SourceType,
 };
 use crate::utils::string::contains_chinese;
-
-const RESOURCE_RESPONSE_TOTAL_TIMEOUT: Duration = Duration::from_secs(60);
-const RESOURCE_RESPONSE_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
-const RESOURCE_RESPONSE_MAX_BYTES: usize = 16 * 1024 * 1024;
-
-#[derive(Debug)]
-pub struct ResourceResponseBodyError {
-  pub bytes_read: usize,
-  pub elapsed: Duration,
-  pub message: String,
-}
-
-/// Read a resource API response with a total budget and an inactivity budget.
-/// A slow JSON response is valid as long as it keeps making progress; a dead
-/// connection is still abandoned after the idle timeout.
-pub async fn read_resource_response_body(
-  response: tauri_plugin_http::reqwest::Response,
-) -> Result<Vec<u8>, ResourceResponseBodyError> {
-  use futures::StreamExt;
-
-  let started = Instant::now();
-  let mut stream = response.bytes_stream();
-  let mut body = Vec::new();
-
-  loop {
-    let elapsed = started.elapsed();
-    let Some(remaining) = RESOURCE_RESPONSE_TOTAL_TIMEOUT.checked_sub(elapsed) else {
-      return Err(ResourceResponseBodyError {
-        bytes_read: body.len(),
-        elapsed,
-        message: "resource response total timeout".to_string(),
-      });
-    };
-    let wait_for = remaining.min(RESOURCE_RESPONSE_IDLE_TIMEOUT);
-    let next = match tokio::time::timeout(wait_for, stream.next()).await {
-      Ok(next) => next,
-      Err(_) => {
-        return Err(ResourceResponseBodyError {
-          bytes_read: body.len(),
-          elapsed: started.elapsed(),
-          message: "resource response idle timeout".to_string(),
-        });
-      }
-    };
-    let Some(chunk) = next else {
-      return Ok(body);
-    };
-    let chunk = match chunk {
-      Ok(chunk) => chunk,
-      Err(error) => {
-        return Err(ResourceResponseBodyError {
-          bytes_read: body.len(),
-          elapsed: started.elapsed(),
-          message: error.to_string(),
-        });
-      }
-    };
-    if body.len().saturating_add(chunk.len()) > RESOURCE_RESPONSE_MAX_BYTES {
-      return Err(ResourceResponseBodyError {
-        bytes_read: body.len(),
-        elapsed: started.elapsed(),
-        message: "resource response exceeded size limit".to_string(),
-      });
-    }
-    body.extend_from_slice(&chunk);
-  }
-}
 
 pub fn get_source_priority_list(launcher_config: &LauncherConfig) -> Vec<SourceType> {
   #[cfg(feature = "test-no-bmclapi")]
