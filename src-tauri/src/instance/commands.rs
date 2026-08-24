@@ -2,16 +2,18 @@ use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use regex::{Regex, RegexBuilder};
 use sanitize_filename;
+use serde::Serialize;
 use sjmcl_types::error::BGUMCLResult;
 use sjmcl_types::partial::{PartialError, PartialUpdate};
 use sjmcl_types::storage::{Storage, load_json_async, save_json_async};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_http::reqwest;
 use tokio;
 use tokio::sync::Semaphore;
@@ -672,9 +674,13 @@ pub async fn retrieve_local_mod_list(
 
   // Add translations for mod names and descriptions concurrently
   let mut translation_tasks = Vec::new();
+  // Translation performs two remote API lookups per mod. Keep it separate
+  // from local jar scanning so a large pack does not open hundreds of HTTP
+  // requests at once.
+  let translation_semaphore = Arc::new(Semaphore::new(4));
   for mut mod_info in mod_infos {
     let app = app.clone();
-    let permit = semaphore
+    let permit = translation_semaphore
       .clone()
       .acquire_owned()
       .await
@@ -1994,8 +2000,65 @@ mod wanda_modpack_tests {
   }
 }
 
+#[derive(Clone, Serialize)]
+struct WandaDownloadProgress {
+  phase: &'static str,
+  current: u64,
+  total: Option<u64>,
+  speed: u64,
+  source: String,
+  message: Option<String>,
+}
+
+const WANDA_DOWNLOAD_PROGRESS_EVENT: &str = "instance:wanda-download-progress";
+
+pub struct WandaDownloadControl(pub AtomicBool);
+
+impl Default for WandaDownloadControl {
+  fn default() -> Self {
+    Self(AtomicBool::new(false))
+  }
+}
+
+fn emit_wanda_download_progress(
+  app: &AppHandle,
+  phase: &'static str,
+  current: u64,
+  total: Option<u64>,
+  speed: u64,
+  source: impl Into<String>,
+  message: Option<String>,
+) {
+  let _ = app.emit(
+    WANDA_DOWNLOAD_PROGRESS_EVENT,
+    WandaDownloadProgress {
+      phase,
+      current,
+      total,
+      speed,
+      source: source.into(),
+      message,
+    },
+  );
+}
+
+fn wanda_source_label(url: &str) -> &'static str {
+  if url.contains("gitee.com") {
+    "Gitee"
+  } else if url.contains("github.com") {
+    "GitHub"
+  } else if url.contains("ghproxy") || url.contains("ghfast") {
+    "加速源"
+  } else {
+    "备用源"
+  }
+}
+
 #[tauri::command]
 pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
+  let control = app.state::<WandaDownloadControl>();
+  control.0.store(false, Ordering::Release);
+  emit_wanda_download_progress(&app, "resolving", 0, None, 0, "", None);
   // Use the dedicated download client (browser User-Agent + long timeout) so
   // proxies do not throttle us and large files are not cut off.
   let client = crate::tasks::download::download_client().clone();
@@ -2012,6 +2075,10 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
   let mut best_release_version: Option<semver::Version> = None;
   let mut saw_release_response = false;
   for api_url in &api_candidates {
+    if control.0.load(Ordering::Acquire) {
+      emit_wanda_download_progress(&app, "cancelled", 0, None, 0, "", None);
+      return Err(InstanceError::NetworkError.into());
+    }
     let response = match client
       .get(*api_url)
       .header("accept", "application/vnd.github+json")
@@ -2131,6 +2198,11 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
   let mut saw_invalid_archive = false;
   let mut saw_file_error = false;
   for candidate in &candidates {
+    if control.0.load(Ordering::Acquire) {
+      emit_wanda_download_progress(&app, "cancelled", 0, None, 0, "", None);
+      let _ = tokio::fs::remove_file(&temp_dest).await;
+      return Err(InstanceError::NetworkError.into());
+    }
     let Ok(resp) = client.get(candidate).send().await else {
       continue;
     };
@@ -2142,6 +2214,9 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       );
       continue;
     }
+    let total = resp.content_length();
+    let source = wanda_source_label(candidate);
+    emit_wanda_download_progress(&app, "downloading", 0, total, 0, source, None);
     let _ = tokio::fs::remove_file(&temp_dest).await;
     let mut file = match tokio::fs::File::create(&temp_dest).await {
       Ok(f) => f,
@@ -2150,13 +2225,51 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
     let mut stream = resp.bytes_stream();
+    let started_at = Instant::now();
+    let mut downloaded = 0_u64;
+    let mut last_progress_at = started_at;
     let mut ok = true;
-    while let Some(chunk) = stream.next().await {
+    let mut cancelled = false;
+    loop {
+      let next_chunk = tokio::select! {
+        chunk = stream.next() => chunk,
+        _ = tokio::time::sleep(std::time::Duration::from_millis(250)) => {
+          if control.0.load(Ordering::Acquire) {
+            cancelled = true;
+            ok = false;
+            break;
+          }
+          continue;
+        }
+      };
+      let Some(chunk) = next_chunk else {
+        break;
+      };
       match chunk {
         Ok(bytes) => {
           if file.write_all(&bytes).await.is_err() {
             ok = false;
             break;
+          }
+          downloaded = downloaded.saturating_add(bytes.len() as u64);
+          if control.0.load(Ordering::Acquire) {
+            cancelled = true;
+            ok = false;
+            break;
+          }
+          let now = Instant::now();
+          if now.duration_since(last_progress_at).as_millis() >= 250 {
+            let speed = (downloaded as f64 / now.duration_since(started_at).as_secs_f64()) as u64;
+            emit_wanda_download_progress(
+              &app,
+              "downloading",
+              downloaded,
+              total,
+              speed,
+              source,
+              None,
+            );
+            last_progress_at = now;
           }
         }
         Err(_) => {
@@ -2165,8 +2278,22 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
         }
       }
     }
+    if cancelled {
+      let _ = tokio::fs::remove_file(&temp_dest).await;
+      emit_wanda_download_progress(&app, "cancelled", downloaded, total, 0, source, None);
+      return Err(InstanceError::NetworkError.into());
+    }
     if ok && file.flush().await.is_ok() {
       drop(file);
+      emit_wanda_download_progress(
+        &app,
+        "verifying",
+        downloaded,
+        total,
+        (downloaded as f64 / started_at.elapsed().as_secs_f64().max(0.001)) as u64,
+        source,
+        None,
+      );
       let archive_path = temp_dest.clone();
       let asset_name = name.clone();
       let archive_dest_dir = dest_dir.clone();
@@ -2176,6 +2303,15 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
       .await
       {
         Ok(Ok(destination)) => {
+          emit_wanda_download_progress(
+            &app,
+            "completed",
+            downloaded,
+            total.or(Some(downloaded)),
+            (downloaded as f64 / started_at.elapsed().as_secs_f64().max(0.001)) as u64,
+            source,
+            None,
+          );
           return Ok(destination.to_string_lossy().to_string());
         }
         Ok(Err(WandaArchiveError::InvalidFormat)) => {
@@ -2202,6 +2338,15 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     let _ = tokio::fs::remove_file(&temp_dest).await;
   }
   let _ = tokio::fs::remove_file(&temp_dest).await;
+  emit_wanda_download_progress(
+    &app,
+    "failed",
+    0,
+    None,
+    0,
+    "",
+    Some("所有下载源均不可用或整合包校验失败".to_string()),
+  );
   if saw_invalid_archive {
     return Err(InstanceError::ModpackManifestParseError.into());
   }
@@ -2209,6 +2354,15 @@ pub async fn download_wanda_modpack(app: AppHandle) -> BGUMCLResult<String> {
     return Err(InstanceError::FileCreationFailed.into());
   }
   Err(InstanceError::NetworkError.into())
+}
+
+#[tauri::command]
+pub fn cancel_wanda_modpack(app: AppHandle) -> BGUMCLResult<()> {
+  app
+    .state::<WandaDownloadControl>()
+    .0
+    .store(true, Ordering::Release);
+  Ok(())
 }
 #[tauri::command]
 pub fn add_custom_instance_icon(
