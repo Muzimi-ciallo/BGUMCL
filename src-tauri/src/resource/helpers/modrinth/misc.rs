@@ -3,7 +3,7 @@ use sjmcl_types::error::{BGUMCLError, BGUMCLResult};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_http::reqwest;
 
-use crate::resource::helpers::misc::version_pack_sort;
+use crate::resource::helpers::misc::{read_resource_response_body, version_pack_sort};
 use crate::resource::models::{
   OtherResourceApiEndpoint, OtherResourceDependency, OtherResourceFileInfo, OtherResourceInfo,
   OtherResourceRequestType, OtherResourceSearchRes, OtherResourceSource, OtherResourceVersionPack,
@@ -33,7 +33,8 @@ where
         OtherResourceRequestType::GetWithParams(params) => client.get(&candidate).query(params),
         OtherResourceRequestType::Get => client.get(&candidate),
         OtherResourceRequestType::Post(payload) => client.post(&candidate).json(payload),
-      };
+      }
+      .timeout(std::time::Duration::from_secs(60));
       let response = match request_builder.send().await {
         Ok(response) => response,
         Err(error) => {
@@ -61,17 +62,21 @@ where
         }
         continue;
       }
-      let body = match response.bytes().await {
+      let content_length = response.content_length();
+      let body = match read_resource_response_body(response).await {
         Ok(body) => body,
         Err(error) => {
           log::warn!(
-            "Modrinth response body read failed (source={}, attempt={}): {}",
+            "Modrinth response body read failed (source={}, attempt={}, bytes={}, content_length={:?}, elapsed_ms={}): {}",
             if candidate == url { "official" } else { "mcim" },
             attempt + 1,
-            error
+            error.bytes_read,
+            content_length,
+            error.elapsed.as_millis(),
+            error.message
           );
-          last_error = ResourceError::ParseError;
-          continue;
+          last_error = ResourceError::NetworkError;
+          break;
         }
       };
       match serde_json::from_slice::<T>(&body) {
@@ -85,6 +90,7 @@ where
             error
           );
           last_error = ResourceError::ParseError;
+          break;
         }
       }
     }

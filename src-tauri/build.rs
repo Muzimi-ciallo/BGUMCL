@@ -52,7 +52,9 @@ fn main() {
   // metadata mirror has a reliable official fallback. Local development
   // builds remain possible without the key because they do not set the
   // release build marker.
-  if env::var("BGUMCL_BUILD_TYPE").as_deref() == Ok("release")
+  let is_formal_release = env::var("BGUMCL_BUILD_TYPE").as_deref() == Ok("release")
+    || env::var("PROFILE").as_deref() == Ok("release");
+  if is_formal_release
     && env::var("BGUMCL_CURSEFORGE_API_KEY")
       .map(|value| value.trim().is_empty())
       .unwrap_or(true)

@@ -6,7 +6,7 @@ use std::env;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_http::reqwest;
 
-use crate::resource::helpers::misc::version_pack_sort;
+use crate::resource::helpers::misc::{read_resource_response_body, version_pack_sort};
 use crate::resource::models::{
   OtherResourceApiEndpoint, OtherResourceDependency, OtherResourceFileInfo, OtherResourceInfo,
   OtherResourceRequestType, OtherResourceSearchRes, OtherResourceSource, OtherResourceVersionPack,
@@ -62,7 +62,10 @@ where
         OtherResourceRequestType::Post(payload) => client.post(&candidate).json(payload),
       }
       .header("Accept", "application/json")
-      .header("Accept-Encoding", "identity");
+      .header("Accept-Encoding", "identity")
+      // The shared client has a short timeout for ordinary metadata. CurseForge
+      // search responses can be several hundred KiB on slow mainland links.
+      .timeout(std::time::Duration::from_secs(60));
 
       // The mirror does not need the private API key. Only send it to the
       // official CurseForge endpoint.
@@ -99,17 +102,23 @@ where
         continue;
       }
 
-      let body = match response.bytes().await {
+      let content_length = response.content_length();
+      let body = match read_resource_response_body(response).await {
         Ok(body) => body,
         Err(error) => {
           log::warn!(
-            "CurseForge response body read failed (source={}, attempt={}): {}",
+            "CurseForge response body read failed (source={}, attempt={}, bytes={}, content_length={:?}, elapsed_ms={}): {}",
             if is_official { "official" } else { "mcim" },
             attempt + 1,
-            error
+            error.bytes_read,
+            content_length,
+            error.elapsed.as_millis(),
+            error.message
           );
-          last_error = ResourceError::ParseError;
-          continue;
+          last_error = ResourceError::NetworkError;
+          // A body timeout means this source is unhealthy for this request;
+          // do not wait through the same slow source a second time.
+          break;
         }
       };
 
@@ -124,6 +133,8 @@ where
             error
           );
           last_error = ResourceError::ParseError;
+          // A complete, non-JSON body is deterministic for this source.
+          break;
         }
       }
     }
