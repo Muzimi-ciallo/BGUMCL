@@ -12,6 +12,7 @@ mod utils;
 use account::helpers::authlib_injector::info::refresh_and_update_auth_servers;
 use account::helpers::offline::yggdrasil_server::YggdrasilServer;
 use account::models::AccountInfo;
+use instance::commands::WandaDownloadControl;
 use instance::helpers::misc::{PendingInstanceCreationMap, refresh_and_update_instances};
 use instance::models::misc::Instance;
 use launch::models::LaunchingState;
@@ -159,6 +160,7 @@ pub async fn run() {
         instance::commands::remove_optifine,
         instance::commands::retrieve_modpack_meta_info,
         instance::commands::download_wanda_modpack,
+        instance::commands::cancel_wanda_modpack,
         instance::commands::add_custom_instance_icon,
         instance::commands::retrieve_exportable_file_list,
         instance::commands::export_modpack,
@@ -249,6 +251,7 @@ pub async fn run() {
         // cleanup uses the exact path from this map and never derives a path
         // from a task display name.
         app.manage(Mutex::new(PendingInstanceCreationMap::new()));
+        app.manage(WandaDownloadControl::default());
 
         let javas: Vec<JavaInfo> = vec![];
         app.manage(Mutex::new(javas));

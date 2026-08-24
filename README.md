@@ -25,10 +25,10 @@ BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的
 前往 [GitHub Releases](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest)，下载名称类似下面格式的文件：
 
 ```text
-BGUMCL_1.4.0_windows_x86_64_portable.exe
+BGUMCL_1.4.1_windows_x86_64_portable.exe
 ```
 
-当前正式版为 **1.4.0**。这是完整便携版，无需安装。
+当前正式版为 **1.4.1**。这是完整便携版，无需安装。
 
 1. 新建一个可读写的独立目录，例如 `D:\Games\BGUMCL`。
 2. 将下载的便携版放入该目录，不要直接在压缩包、临时目录或系统保护目录中运行。
@@ -67,6 +67,7 @@ BGUMCL_1.4.0_windows_x86_64_portable.exe
 ## 中国大陆下载优化
 
 1.4.0 引入 Download Engine V2，让整合包、模组、加载器运行库和 Minecraft 文件共享同一套下载调度逻辑。
+1.4.1 增加湾大整合包下载进度、取消与关闭控制，并修复下载失败后同名实例残留导致无法重试的问题。
 
 - 为每个文件保留当前表现最好的候选源，连接失败、超时或持续低速时再切换。
 - 根据任务规模和网络反馈动态调整并发，不使用固定并发一口气压满连接。
@@ -153,7 +154,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 pnpm tauri build --no-bundle
 python scripts/release/bundle_portable_assets.py `
   -p src-tauri/target/release `
-  -o BGUMCL_1.4.0_windows_x86_64_portable.exe `
+  -o BGUMCL_1.4.1_windows_x86_64_portable.exe `
   BGUMCL.exe
 ```
 

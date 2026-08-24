@@ -51,6 +51,10 @@ where
   let mut last_error = ResourceError::NetworkError;
   for candidate in candidates {
     let is_official = candidate == url;
+    if is_official && CURSEFORGE_API_KEY.is_empty() {
+      log::debug!("Skipping unauthenticated CurseForge API request");
+      continue;
+    }
     for attempt in 0..2 {
       let mut request_builder = match request_type {
         OtherResourceRequestType::GetWithParams(params) => client.get(&candidate).query(params),
@@ -89,6 +93,9 @@ where
           attempt + 1
         );
         last_error = ResourceError::NetworkError;
+        if status.is_client_error() && !matches!(status.as_u16(), 408 | 425 | 429) {
+          break;
+        }
         continue;
       }
 

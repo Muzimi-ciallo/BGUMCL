@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { InstanceSubdirType } from "@/enums/instance";
 import { GameConfig, GameDirectory } from "@/models/config";
 import {
@@ -22,6 +23,23 @@ import {
 } from "@/models/resource";
 import { InvokeResponse } from "@/models/response";
 import { responseHandler } from "@/utils/response";
+
+export const WANDA_DOWNLOAD_PROGRESS_EVENT = "instance:wanda-download-progress";
+
+export interface WandaDownloadProgress {
+  phase:
+    | "resolving"
+    | "downloading"
+    | "verifying"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  current: number;
+  total: number | null;
+  speed: number;
+  source: string;
+  message: string | null;
+}
 
 /**
  * Service class for managing instances and its local resources.
@@ -590,6 +608,22 @@ export class InstanceService {
   @responseHandler("instance")
   static async downloadWandaModpack(): Promise<InvokeResponse<string>> {
     return await invoke("download_wanda_modpack");
+  }
+
+  static async cancelWandaModpack(): Promise<InvokeResponse<void>> {
+    return await invoke("cancel_wanda_modpack");
+  }
+
+  static onWandaDownloadProgress(
+    callback: (progress: WandaDownloadProgress) => void
+  ): () => void {
+    const unlisten = getCurrentWebview().listen<WandaDownloadProgress>(
+      WANDA_DOWNLOAD_PROGRESS_EVENT,
+      (event) => callback(event.payload)
+    );
+    return () => {
+      unlisten.then((dispose) => dispose());
+    };
   }
   /**
    * ADD/REPLACE the custom instance icon.

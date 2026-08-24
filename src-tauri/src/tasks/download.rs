@@ -114,7 +114,11 @@ impl DownloadGroupState {
   pub fn new(max_connections: usize) -> Self {
     let now = Instant::now();
     let max_connections = max_connections.clamp(1, 128);
-    let initial_connections = max_connections.min(32);
+    // Start conservatively. PCL-style scheduling only grows after a measured
+    // throughput improvement; starting dozens of streams on mainland home
+    // networks otherwise turns thousands of small files into a queue of
+    // throttled connections.
+    let initial_connections = max_connections.min(16);
     Self {
       max_connections,
       active_connections: AtomicUsize::new(0),
@@ -169,13 +173,13 @@ impl DownloadGroupState {
       let target = self.target_connections.load(Ordering::Relaxed);
       let active = self.active_connections.load(Ordering::Relaxed);
       let preserved_throughput =
-        state.last_growth_speed == 0.0 || speed >= state.last_growth_speed * 0.8;
+        state.last_growth_speed == 0.0 || speed >= state.last_growth_speed * 1.1;
       if target < self.max_connections
         && active >= target.saturating_sub(4)
         && speed > 0.0
         && preserved_throughput
       {
-        let growth = 16.min(self.max_connections - target);
+        let growth = 8.min(self.max_connections - target);
         self.stream_budget.add_permits(growth);
         self
           .target_connections
@@ -704,7 +708,7 @@ impl DownloadTask {
 
       // add api key header for CurseForge download urls (#1679)
       // ref: https://blog.curseforge.com/introducing-api-key-authentication-for-curseforge-file-downloads
-      if is_curseforge_authenticated_url(&param.src) {
+      if is_curseforge_authenticated_url(&param.src) && !CURSEFORGE_API_KEY.is_empty() {
         request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
       }
 
@@ -814,7 +818,7 @@ impl DownloadTask {
       None => client.get(url),
     }
     .header("Accept-Encoding", "identity");
-    if authenticated {
+    if authenticated && !CURSEFORGE_API_KEY.is_empty() {
       request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
     }
     if candidate.contains("bmclapi") {

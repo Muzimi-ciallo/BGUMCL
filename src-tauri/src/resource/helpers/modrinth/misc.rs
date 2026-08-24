@@ -48,13 +48,17 @@ where
         }
       };
       if !response.status().is_success() {
+        let status = response.status();
         log::warn!(
           "Modrinth request returned HTTP {} (source={}, attempt={})",
-          response.status(),
+          status,
           if candidate == url { "official" } else { "mcim" },
           attempt + 1
         );
         last_error = ResourceError::NetworkError;
+        if status.is_client_error() && !matches!(status.as_u16(), 408 | 425 | 429) {
+          break;
+        }
         continue;
       }
       let body = match response.bytes().await {

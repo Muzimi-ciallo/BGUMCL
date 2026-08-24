@@ -167,6 +167,17 @@ pub async fn continue_pending_instance_by_id(
 /// can be created again (fixes "the directory already contains an instance
 /// with the same name" after cancelling a download).
 pub fn cleanup_cancelled_instance_creation(app: &AppHandle, task_group: &str) {
+  cleanup_pending_instance_creation(app, task_group, "cancelled");
+}
+
+/// Remove the exact instance directory and state after a progressive
+/// creation group has drained with a failure. Failed groups previously left
+/// this record behind, so retrying the same import was rejected as a duplicate.
+pub fn cleanup_failed_instance_creation(app: &AppHandle, task_group: &str) {
+  cleanup_pending_instance_creation(app, task_group, "failed");
+}
+
+fn cleanup_pending_instance_creation(app: &AppHandle, task_group: &str, reason: &str) {
   let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
   let Some(record) = pending
     .lock()
@@ -181,13 +192,15 @@ pub fn cleanup_cancelled_instance_creation(app: &AppHandle, task_group: &str) {
   if removed_path.exists() {
     if let Err(error) = fs::remove_dir_all(&removed_path) {
       log::warn!(
-        "Failed to remove incomplete instance directory after cancellation {:?}: {}",
+        "Failed to remove incomplete instance directory after {} {:?}: {}",
+        reason,
         removed_path,
         error
       );
     } else {
       log::info!(
-        "Removed incomplete instance directory after cancelled creation: {:?}",
+        "Removed incomplete instance directory after {} creation: {:?}",
+        reason,
         removed_path
       );
     }

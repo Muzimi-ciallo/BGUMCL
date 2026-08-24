@@ -70,7 +70,10 @@ impl TaskMonitor {
           let cpu_count = std::thread::available_parallelism()
             .map(|count| count.get())
             .unwrap_or(4);
-          (cpu_count.saturating_mul(8)).clamp(32, 128)
+          // Keep runnable tasks bounded while the download group probes its
+          // actual network capacity. A large task queue makes weak links
+          // look busy without increasing aggregate throughput.
+          (cpu_count.saturating_mul(4)).clamp(16, 64)
         } else {
           config.download.transmission.concurrent_count
         },
@@ -386,6 +389,12 @@ impl TaskMonitor {
                     group.status = GEventStatus::Completed;
                   }
                   download_groups.lock().unwrap().remove(&group_name);
+                  if was_failed {
+                    crate::instance::helpers::misc::cleanup_failed_instance_creation(
+                      &app,
+                      &group_name,
+                    );
+                  }
                   if !was_failed {
                     GEvent::emit_group_completed(&app, &group_name)
                   }
@@ -406,6 +415,10 @@ impl TaskMonitor {
                   group.phs.remove(&future.task_id);
                   if group.phs.is_empty() {
                     download_groups.lock().unwrap().remove(&group_name);
+                    crate::instance::helpers::misc::cleanup_failed_instance_creation(
+                      &app,
+                      &group_name,
+                    );
                   }
                 }
               }
