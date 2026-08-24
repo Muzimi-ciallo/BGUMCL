@@ -41,7 +41,8 @@ interface TaskContextType {
   generalPercent: number | undefined; // General progress percentage for all tasks
   handleScheduleProgressiveTaskGroup: (
     taskGroup: string,
-    params: TaskParam[]
+    params: TaskParam[],
+    withTimestamp?: boolean
   ) => void;
   handleCancelProgressiveTaskGroup: (taskGroup: string) => void;
   handleStopProgressiveTaskGroup: (taskGroup: string) => void;
@@ -164,19 +165,21 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [handleRetrieveProgressTasks]);
 
   const handleScheduleProgressiveTaskGroup = useCallback(
-    (taskGroup: string, params: TaskParam[]) => {
-      TaskService.scheduleProgressiveTaskGroup(taskGroup, params).then(
-        (response) => {
-          // success toast will now be called by task context group listener
-          if (response.status !== "success") {
-            toast({
-              title: response.message,
-              description: response.details,
-              status: "error",
-            });
-          }
+    (taskGroup: string, params: TaskParam[], withTimestamp = true) => {
+      TaskService.scheduleProgressiveTaskGroup(
+        taskGroup,
+        params,
+        withTimestamp
+      ).then((response) => {
+        // success toast will now be called by task context group listener
+        if (response.status !== "success") {
+          toast({
+            title: response.message,
+            description: response.details,
+            status: "error",
+          });
         }
-      );
+      });
     },
     [toast]
   );
