@@ -11,8 +11,7 @@
 [![Package](https://img.shields.io/badge/分发方式-便携版-2ea44f)](#下载与使用)
 [![License](https://img.shields.io/badge/许可证-GPL--3.0-blue)](LICENSE)
 
-[下载最新版](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest) · [提交问题](https://github.com/Muzimi-ciallo/BGUMCL/issues/new/choose) · [更新日志](docs/CHANGELOG.zh-Hans.md)
-
+[下载最新版](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest) · [提交问题](https://github.com/Muzimi-ciallo/BGUMCL/issues/new/choose) · 
 </div>
 
 > [!IMPORTANT]
