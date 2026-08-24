@@ -18,7 +18,7 @@
 > [!IMPORTANT]
 > BGUMCL 目前只发布 **Windows 10/11 x86_64 便携版**，不提供安装器、macOS 或 Linux 客户端。项目仍在持续开发，请在导入、迁移或删除实例前备份重要存档。
 
-BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的开源 Minecraft 启动器。项目保留 SJMCL 的实例管理、资源发现、账户和扩展能力，并重点改善中国大陆网络下导入整合包后下载模组、Forge 运行库及 Minecraft 资源时的速度与稳定性。
+BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的开源 Minecraft 启动器。项目保留 SJMCL 的实例管理、资源发现、账户和扩展能力，并重点改善中国大陆网络下导入整合包后下载模组、Forge 运行库及 Minecraft 资源时的速度与稳定性。并针对本校Minecraft社群服务器进行了一键下载服务器整合包和小规模整合包增量更新功能。
 
 ## 下载与使用
 
