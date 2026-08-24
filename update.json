@@ -1,6 +1,6 @@
 {
-  "version": "1.4.3",
-  "base_url": "https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.4.3",
-  "release_notes": "",
-  "published_at": ""
+  "version": "1.4.4",
+  "base_url": "https://github.com/Muzimi-ciallo/BGUMCL/releases/download/v1.4.4",
+  "release_notes": "修复下载任务失败后重试无效、失败导入实例被错误清理等问题。",
+  "published_at": "2026-08-25"
 }
