@@ -222,21 +222,31 @@ export const DownloadTasksPage = () => {
                           h={21}
                           ml={1}
                           variant="ghost"
-                          onClick={() =>
+                          onClick={() => {
+                            const isFailedGroup =
+                              group.status === GTaskEventStatusEnums.Failed;
+                            const retryParams = group.taskDescs
+                              .filter((t) =>
+                                isFailedGroup
+                                  ? t.status === TaskDescStatusEnums.Failed
+                                  : t.status !== TaskDescStatusEnums.Completed
+                              )
+                              .map((t) => t.payload);
+
                             handleScheduleProgressiveTaskGroup(
-                              "retry-" +
-                                parseTaskGroup(group.taskGroup).rawName.replace(
-                                  /^retry-/,
-                                  ""
-                                ),
-                              group.taskDescs
-                                .filter(
-                                  (t) =>
-                                    t.status !== TaskDescStatusEnums.Completed
-                                )
-                                .map((t) => t.payload)
-                            )
-                          }
+                              // Failed imports keep the original group so the
+                              // pending instance record remains addressable.
+                              // Cancelled groups retain the legacy new-group
+                              // behavior because cancellation already cleans
+                              // up the pending instance.
+                              isFailedGroup
+                                ? group.taskGroup
+                                : "retry-" +
+                                    parseTaskGroup(group.taskGroup).rawName,
+                              retryParams,
+                              !isFailedGroup
+                            );
+                          }}
                         />
                       </Tooltip>
                     )}

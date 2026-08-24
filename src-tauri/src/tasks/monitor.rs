@@ -379,47 +379,65 @@ impl TaskMonitor {
           let r = future.f.await;
           match r {
             Ok(_) => {
-              if let Some(group_name) = future.task_group
-                && let Some(group) = group_map.write().unwrap().get_mut(&group_name)
-              {
-                group.phs.remove(&future.task_id);
-                if group.phs.is_empty() {
-                  let was_failed = group.status == GEventStatus::Failed;
-                  if !was_failed {
-                    group.status = GEventStatus::Completed;
+              let terminal_event = if let Some(group_name) = future.task_group {
+                let mut group_map = group_map.write().unwrap();
+                if let Some(group) = group_map.get_mut(&group_name) {
+                  group.phs.remove(&future.task_id);
+                  if group.phs.is_empty() {
+                    let was_failed = group.status == GEventStatus::Failed;
+                    if !was_failed {
+                      group.status = GEventStatus::Completed;
+                    }
+                    download_groups.lock().unwrap().remove(&group_name);
+                    Some((group_name, was_failed))
+                  } else {
+                    None
                   }
-                  download_groups.lock().unwrap().remove(&group_name);
-                  if was_failed {
-                    crate::instance::helpers::misc::cleanup_failed_instance_creation(
-                      &app,
-                      &group_name,
-                    );
-                  }
-                  if !was_failed {
-                    GEvent::emit_group_completed(&app, &group_name)
-                  }
+                } else {
+                  None
+                }
+              } else {
+                None
+              };
+
+              if let Some((group_name, was_failed)) = terminal_event {
+                if was_failed {
+                  // A failed group is retryable. Keep the pending instance
+                  // record and its partial directory until the user retries
+                  // or explicitly deletes/cancels the task.
+                  GEvent::emit_group_failed(&app, &group_name);
+                } else {
+                  GEvent::emit_group_completed(&app, &group_name);
                 }
               }
             }
             Err(e) => {
               info!("Task failed: {e:?}");
               if let Some(group_name) = future.task_group {
-                GEvent::emit_group_failed(&app, &group_name);
                 // PCL isolates a failed NetFile. Keep the other files alive
                 // so a transient failure in one MOD does not cancel an
                 // otherwise healthy import. The group remains Failed until
                 // its remaining files drain, preventing a false Completed
                 // event at the end.
-                if let Some(group) = group_map.write().unwrap().get_mut(&group_name) {
+                let terminal = if let Some(group) = group_map.write().unwrap().get_mut(&group_name)
+                {
                   group.status = GEventStatus::Failed;
                   group.phs.remove(&future.task_id);
                   if group.phs.is_empty() {
                     download_groups.lock().unwrap().remove(&group_name);
-                    crate::instance::helpers::misc::cleanup_failed_instance_creation(
-                      &app,
-                      &group_name,
-                    );
+                    true
+                  } else {
+                    false
                   }
+                } else {
+                  false
+                };
+
+                if terminal {
+                  // Emit failure only after every other task has drained, so
+                  // the UI cannot start a duplicate retry while work from the
+                  // original group is still writing files.
+                  GEvent::emit_group_failed(&app, &group_name);
                 }
               }
             }
@@ -607,6 +625,10 @@ impl TaskMonitor {
       // Only delete non-active groups (not Started/Stopped); backend status is authoritative for race-condition protection.
       if group.status != GEventStatus::Started && group.status != GEventStatus::Stopped {
         group_map.remove(&task_group);
+        crate::instance::helpers::misc::cleanup_failed_instance_creation(
+          &self.app_handle,
+          &task_group,
+        );
       }
     }
   }
