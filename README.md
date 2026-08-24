@@ -11,14 +11,13 @@
 [![Package](https://img.shields.io/badge/分发方式-便携版-2ea44f)](#下载与使用)
 [![License](https://img.shields.io/badge/许可证-GPL--3.0-blue)](LICENSE)
 
-[下载最新版](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest) · [提交问题](https://github.com/Muzimi-ciallo/BGUMCL/issues/new/choose) · [更新日志](docs/CHANGELOG.zh-Hans.md)
-
+[下载最新版](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest) · [提交问题](https://github.com/Muzimi-ciallo/BGUMCL/issues/new/choose) · 
 </div>
 
 > [!IMPORTANT]
 > BGUMCL 目前只发布 **Windows 10/11 x86_64 便携版**，不提供安装器、macOS 或 Linux 客户端。项目仍在持续开发，请在导入、迁移或删除实例前备份重要存档。
 
-BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的开源 Minecraft 启动器。项目保留 SJMCL 的实例管理、资源发现、账户和扩展能力，并重点改善中国大陆网络下导入整合包后下载模组、Forge 运行库及 Minecraft 资源时的速度与稳定性。
+BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的开源 Minecraft 启动器。项目保留 SJMCL 的实例管理、资源发现、账户和扩展能力，并重点改善中国大陆网络下导入整合包后下载模组、Forge 运行库及 Minecraft 资源时的速度与稳定性。并针对本校Minecraft社群服务器进行了一键下载服务器整合包和小规模整合包增量更新功能。
 
 ## 下载与使用
 
@@ -28,7 +27,7 @@ BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的
 BGUMCL_1.4.1_windows_x86_64_portable.exe
 ```
 
-当前正式版为 **1.4.1**。这是完整便携版，无需安装。
+当前正式版为 **1.4.3**。这是完整便携版，无需安装。
 
 1. 新建一个可读写的独立目录，例如 `D:\Games\BGUMCL`。
 2. 将下载的便携版放入该目录，不要直接在压缩包、临时目录或系统保护目录中运行。
@@ -171,6 +170,7 @@ python scripts/release/bundle_portable_assets.py `
 
 BGUMCL **基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 修改而来**，并非 SJMCL 官方发行版。感谢 SJMCL 项目及其所有[贡献者](https://github.com/UNIkeEN/SJMCL/graphs/contributors)提供的开源基础与启发。
 
-同时感谢 DSV4-Pro 蓝色吃白饭大肥鱼 在项目修改和调试过程中的协助与支持。
+同时感谢 DSV4-Pro蓝色吃白饭大肥鱼和Codex在项目修改和调试过程中的协助与支持。
+还有感谢内测群友给我试出了一堆神秘BUG
 
 本项目依据 [GNU General Public License v3.0](LICENSE) 及其[附加条款](LICENSE.EXTRA)发布。分发修改版本时，请同时遵守两份许可文件中的要求。
