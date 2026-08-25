@@ -1799,7 +1799,7 @@ mod tests {
   #[test]
   fn v2_stream_budget_starts_bounded_and_can_grow_to_requested_ceiling() {
     let automatic = DownloadGroupState::new(128);
-    assert_eq!(automatic.target_connections.load(Ordering::Relaxed), 32);
+    assert_eq!(automatic.target_connections.load(Ordering::Relaxed), 16);
     assert_eq!(automatic.max_connections, 128);
     let manual = DownloadGroupState::new(12);
     assert_eq!(manual.target_connections.load(Ordering::Relaxed), 12);

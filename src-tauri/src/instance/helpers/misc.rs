@@ -1,4 +1,5 @@
 use sanitize_filename;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sjmcl_types::error::BGUMCLResult;
 use sjmcl_types::storage::load_json_async;
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 use zip::ZipArchive;
@@ -21,6 +23,11 @@ use crate::instance::models::misc::{
 use crate::launcher_config::helpers::misc::get_global_game_config;
 use crate::launcher_config::models::{GameConfig, GameDirectory, LauncherConfig};
 use crate::resource::helpers::misc::get_source_priority_list;
+use crate::tasks::PTaskParam;
+use crate::tasks::commands::schedule_progressive_task_group;
+use crate::tasks::monitor::TaskMonitor;
+
+const PENDING_IMPORT_MARKER: &str = ".bgumcl-pending-import.json";
 
 pub fn get_instance_game_config(app: &AppHandle, instance: &Instance) -> GameConfig {
   if instance.use_spec_game_config
@@ -39,19 +46,127 @@ pub struct PendingInstanceCreation {
   pub instance: Instance,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingInstanceCreationMarker {
+  pub instance: Instance,
+  pub task_group: String,
+  pub task_params: Vec<PTaskParam>,
+  pub modpack_sha256: Option<String>,
+}
+
 pub type PendingInstanceCreationMap = HashMap<String, PendingInstanceCreation>;
 
 pub fn register_pending_instance_creation(
   app: &AppHandle,
   task_group: String,
   instance: Instance,
+  task_params: Vec<PTaskParam>,
+  modpack_sha256: Option<String>,
 ) -> BGUMCLResult<()> {
+  let marker = PendingInstanceCreationMarker {
+    instance: instance.clone(),
+    task_group: task_group.clone(),
+    task_params: task_params.clone(),
+    modpack_sha256: modpack_sha256.clone(),
+  };
+  let marker_path = instance.version_path.join(PENDING_IMPORT_MARKER);
+  let marker_bytes = serde_json::to_vec_pretty(&marker)?;
+  fs::write(marker_path, marker_bytes)?;
   let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
   pending
     .lock()
     .map_err(|_| InstanceError::InstanceNotFoundByID)?
     .insert(task_group, PendingInstanceCreation { instance });
   Ok(())
+}
+
+/// Reopen a failed modpack import when the user selects the same source again.
+/// The marker is deliberately checked by SHA-256, so an unrelated instance
+/// with the same display name is still protected by the normal conflict path.
+pub async fn resume_pending_import_if_matching(
+  app: &AppHandle,
+  version_path: &PathBuf,
+  modpack_path: &str,
+) -> BGUMCLResult<bool> {
+  let marker_path = version_path.join(PENDING_IMPORT_MARKER);
+  if !marker_path.exists() {
+    return Ok(false);
+  }
+  let marker: PendingInstanceCreationMarker = match serde_json::from_slice(&fs::read(&marker_path)?)
+  {
+    Ok(marker) => marker,
+    Err(error) => {
+      log::warn!(
+        "Ignoring invalid pending import marker {:?}: {}",
+        marker_path,
+        error
+      );
+      return Ok(false);
+    }
+  };
+  let Some(expected_sha256) = marker.modpack_sha256.as_ref() else {
+    return Ok(false);
+  };
+  let actual_sha256 = match crate::utils::fs::calculate_sha256(&PathBuf::from(modpack_path)) {
+    Ok(value) => value,
+    Err(_) => return Ok(false),
+  };
+  if &actual_sha256 != expected_sha256 || marker.instance.version_path != *version_path {
+    return Ok(false);
+  }
+
+  let monitor = app.state::<Pin<Box<TaskMonitor>>>();
+  if monitor.task_group_is_active(&marker.task_group) {
+    return Ok(true);
+  }
+
+  let task_desc = schedule_progressive_task_group(
+    app.clone(),
+    marker.task_group.clone(),
+    marker.task_params.clone(),
+    false,
+  )
+  .await?;
+  register_pending_instance_creation(
+    app,
+    task_desc.task_group,
+    marker.instance,
+    marker.task_params,
+    marker.modpack_sha256,
+  )?;
+  Ok(true)
+}
+
+/// Restore ownership records after a launcher restart. The marker is scanned
+/// independently of the normal instance list because a failed import may not
+/// have a complete client jar yet and would otherwise be skipped.
+pub fn restore_pending_instance_creations(app: &AppHandle, game_directories: &[GameDirectory]) {
+  let pending = app.state::<Mutex<PendingInstanceCreationMap>>();
+  let Ok(mut pending) = pending.lock() else {
+    return;
+  };
+  for game_directory in game_directories {
+    let versions = game_directory.dir.join("versions");
+    let Ok(entries) = fs::read_dir(versions) else {
+      continue;
+    };
+    for entry in entries.flatten() {
+      let marker_path = entry.path().join(PENDING_IMPORT_MARKER);
+      let Ok(bytes) = fs::read(marker_path) else {
+        continue;
+      };
+      let Ok(marker) = serde_json::from_slice::<PendingInstanceCreationMarker>(&bytes) else {
+        continue;
+      };
+      pending.insert(
+        marker.task_group.clone(),
+        PendingInstanceCreation {
+          instance: marker.instance,
+        },
+      );
+    }
+  }
 }
 
 /// Continue the explicit second stage of a newly-created instance.  Ordinary
@@ -143,6 +258,7 @@ pub async fn continue_instance_creation(app: &AppHandle, task_group: &str) -> BG
   }
 
   pending.lock()?.remove(task_group);
+  let _ = fs::remove_file(instance.version_path.join(PENDING_IMPORT_MARKER));
   Ok(())
 }
 
@@ -205,6 +321,7 @@ fn cleanup_pending_instance_creation(app: &AppHandle, task_group: &str, reason: 
       );
     }
   }
+  let _ = fs::remove_file(removed_path.join(PENDING_IMPORT_MARKER));
 
   // `create_instance` registers the instance in the in-memory map before the
   // next list refresh. Remove that entry as well; otherwise a stale summary
@@ -626,6 +743,8 @@ pub async fn refresh_and_update_instances(app: &AppHandle, is_first_run: bool) {
   let binding = app.state::<Mutex<HashMap<String, Instance>>>();
   let mut state = binding.lock().unwrap();
   *state = instances;
+  drop(state);
+  restore_pending_instance_creations(app, &local_game_directories);
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]

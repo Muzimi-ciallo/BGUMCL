@@ -1077,7 +1077,20 @@ pub async fn create_instance(
   // metadata files are missing. A cancelled creation is cleaned up only by
   // the exact in-memory ownership record after its task has stopped.
   let version_path = directory.dir.join("versions").join(&name);
+  let modpack_sha256 = modpack_path
+    .as_deref()
+    .and_then(|path| crate::utils::fs::calculate_sha256(&PathBuf::from(path)).ok());
   if version_path.exists() {
+    if let Some(modpack_path) = modpack_path.as_deref()
+      && crate::instance::helpers::misc::resume_pending_import_if_matching(
+        &app,
+        &version_path,
+        modpack_path,
+      )
+      .await?
+    {
+      return Ok(());
+    }
     return Err(InstanceError::ConflictNameError.into());
   }
 
@@ -1294,7 +1307,7 @@ pub async fn create_instance(
   }
 
   // If modpack path is provided, install it
-  if let Some(modpack_path) = modpack_path {
+  if let Some(modpack_path) = modpack_path.as_deref() {
     let path = PathBuf::from(modpack_path);
     let file = fs::File::open(&path).map_err(|_| InstanceError::FileNotFoundError)?;
     task_params.extend(get_download_params(&app, &file, &version_path).await?);
@@ -1348,7 +1361,8 @@ pub async fn create_instance(
     None => format!("game-client?{}", name),
   };
   let task_desc =
-    match schedule_progressive_task_group(app.clone(), task_group, task_params, true).await {
+    match schedule_progressive_task_group(app.clone(), task_group, task_params.clone(), true).await
+    {
       Ok(desc) => desc,
       Err(error) => {
         let binding = app.state::<Mutex<HashMap<String, Instance>>>();
@@ -1363,6 +1377,8 @@ pub async fn create_instance(
     &app,
     task_desc.task_group,
     instance.clone(),
+    task_params,
+    modpack_sha256,
   )?;
 
   dir_guard.commit();

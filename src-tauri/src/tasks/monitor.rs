@@ -651,6 +651,15 @@ impl TaskMonitor {
       .collect()
   }
 
+  pub fn task_group_is_active(&self, task_group: &str) -> bool {
+    self
+      .group_map
+      .read()
+      .unwrap()
+      .get(task_group)
+      .is_some_and(|group| matches!(group.status, GEventStatus::Started | GEventStatus::Stopped))
+  }
+
   pub fn has_active_download_tasks(&self) -> bool {
     let phs = self.phs.read().unwrap();
     for handle in phs.values() {
