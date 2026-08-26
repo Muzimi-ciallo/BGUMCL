@@ -46,9 +46,14 @@ const RECOVERY_DOWNLOAD_ATTEMPTS: usize = 3;
 // and assembly overhead.
 const SEGMENTED_DOWNLOAD_THRESHOLD: i64 = 8 * 1024 * 1024;
 const MAX_DOWNLOAD_SEGMENTS: i64 = 8;
-const SOURCE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+// PCL keeps a source alive for at least 15 seconds and allows the timeout to
+// grow after repeated failures. BGUMCL's old fixed 10-second window caused
+// transient mainland-China route delays to exhaust both NeoForge sources.
+const SOURCE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const HEDGED_REQUEST_DELAY: Duration = Duration::from_millis(2500);
-const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(10);
+// Match PCL's 15-30 second no-data tolerance. This is a stall timeout, not a
+// total download timeout, so a slow but progressing connection is preserved.
+const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const LIMITED_DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(60);
 const BMCLAPI_REQUEST_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -502,6 +507,22 @@ impl DownloadTask {
     // the path used by Forge installers and their libraries. Other Maven and
     // Mojang files keep the normal official-first order.
     let mut candidates = crate::utils::web::minecraft_download_candidates(param.src.as_str());
+    // PCL puts NeoForge Maven behind BMCLAPI first, with the official Maven
+    // endpoint as the fallback. Keep both URLs, but preserve that order so a
+    // mainland-friendly mirror gets the first chance.
+    let is_neoforge_maven = param
+      .src
+      .host_str()
+      .is_some_and(|host| host == "maven.neoforged.net")
+      && param.src.path().contains("/net/neoforged/");
+    if is_neoforge_maven {
+      if let Some(index) = candidates
+        .iter()
+        .position(|candidate| candidate.contains("bmclapi"))
+      {
+        candidates.swap(0, index);
+      }
+    }
     let is_forge_maven =
       param.src.host_str().is_some_and(|host| {
         host == "files.minecraftforge.net" || host == "maven.minecraftforge.net"
