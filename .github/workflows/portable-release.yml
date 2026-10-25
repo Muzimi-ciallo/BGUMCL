@@ -35,6 +35,7 @@ jobs:
         with:
           workspaces: ./src-tauri -> target
           key: windows-portable
+          cache-on-failure: true
       - run: pnpm install --frozen-lockfile
       - name: Validate frontend and versions
         run: |
