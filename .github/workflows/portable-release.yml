@@ -40,7 +40,7 @@ jobs:
         run: |
           pnpm eslint --no-fix --max-warnings=0
           pnpm exec tsc --noEmit
-          pnpm version check
+          pnpm run version check
       - name: Check backend
         working-directory: src-tauri
         run: cargo check --locked
