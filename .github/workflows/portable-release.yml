@@ -43,7 +43,7 @@ jobs:
           pnpm run version check
       - name: Check backend
         working-directory: src-tauri
-        run: cargo check --locked
+        run: cargo check --locked --tests
       - name: Run backend regression tests
         working-directory: src-tauri
         run: cargo test --locked --lib

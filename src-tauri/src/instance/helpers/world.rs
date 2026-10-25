@@ -178,7 +178,7 @@ mod tests {
   use crate::instance::helpers::world::{
     level_data_to_world_info, load_world_data_from_dir, load_world_info_from_dir,
   };
-  use quartz_nbt::io::write_nbt;
+  use quartz_nbt::io::{Flavor, write_nbt};
   use quartz_nbt::{NbtCompound, NbtTag};
   use uuid::Uuid;
 
