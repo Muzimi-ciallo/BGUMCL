@@ -1,0 +1,68 @@
+name: Windows Portable Release
+
+on:
+  push:
+    branches:
+      - codex/release-*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      BGUMCL_CURSEFORGE_API_KEY: ${{ secrets.BGUMCL_CURSEFORGE_API_KEY }}
+      BGUMCL_COMMIT_SHA: ${{ github.sha }}
+      BGUMCL_BUILD_TYPE: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+          key: windows-portable
+      - run: pnpm install --frozen-lockfile
+      - name: Validate frontend and versions
+        run: |
+          pnpm eslint --no-fix --max-warnings=0
+          pnpm exec tsc --noEmit
+          pnpm version check
+      - name: Check backend
+        working-directory: src-tauri
+        run: cargo check --locked
+      - name: Run backend regression tests
+        working-directory: src-tauri
+        run: cargo test --locked --lib
+      - name: Build Windows portable executable
+        run: pnpm tauri build --no-bundle
+      - name: Bundle and verify portable resources
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $name = "BGUMCL_${version}_windows_x86_64_portable.exe"
+          python scripts/release/bundle_portable_assets.py -p src-tauri/target/release -o $name BGUMCL.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          Copy-Item -LiteralPath "src-tauri/target/release/$name" -Destination artifacts
+          $hash = (Get-FileHash -LiteralPath "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content -LiteralPath artifacts/SHA256SUMS.txt -Encoding utf8
+          python -c "import pathlib,struct,zipfile,io; p=next(pathlib.Path('artifacts').glob('*.exe')); b=p.read_bytes(); assert b[-12:-8]==b'PORT'; start,size=struct.unpack('<II',b[-8:]); assert start+size==len(b)-12; z=zipfile.ZipFile(io.BytesIO(b[start:start+size])); assert z.testzip() is None; assert 'assets/icons/icon.png' in z.namelist(); assert any(n.startswith('assets/game/') for n in z.namelist()); print('Portable resource validation passed')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BGUMCL-windows-portable
+          path: artifacts/*
+          if-no-files-found: error

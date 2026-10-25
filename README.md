@@ -24,10 +24,10 @@ BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的
 前往 [GitHub Releases](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest)，下载名称类似下面格式的文件：
 
 ```text
-BGUMCL_1.4.1_windows_x86_64_portable.exe
+BGUMCL_1.4.7_windows_x86_64_portable.exe
 ```
 
-当前正式版为 **1.4.3**。这是完整便携版，无需安装。
+当前正式版为 **1.4.7**。这是完整便携版，无需安装。
 
 1. 新建一个可读写的独立目录，例如 `D:\Games\BGUMCL`。
 2. 将下载的便携版放入该目录，不要直接在压缩包、临时目录或系统保护目录中运行。
