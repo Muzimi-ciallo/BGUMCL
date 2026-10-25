@@ -133,6 +133,13 @@ where
       self.desc.total = total;
       self.persist();
       self.reporter.set_total(total);
+      // The response headers can reveal the size after the task has started.
+      // Refresh the frontend's total before subsequent byte-progress events.
+      if self.desc.status.is_in_progress() {
+        self
+          .reporter
+          .report_started(self.desc.task_id, self.desc.task_group.as_deref(), total);
+      }
     }
   }
 
@@ -181,5 +188,62 @@ where
       self.desc.task_group.as_deref(),
       self.desc.current,
     );
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::tasks::streams::desc::{PDesc, PStatus};
+  use crate::tasks::streams::handle::PHandle;
+  use crate::tasks::streams::reporter::{Reporter, Sink};
+  use std::sync::{Arc, Mutex};
+  use std::time::Duration;
+
+  struct RecordingSink(Arc<Mutex<Vec<(&'static str, i64)>>>);
+
+  impl Sink for RecordingSink {
+    fn report_progress(
+      &self,
+      _: u32,
+      _: Option<&str>,
+      _: i64,
+      total: i64,
+      _: u32,
+      _: Option<f64>,
+      _: f64,
+    ) {
+      self.0.lock().unwrap().push(("progress", total));
+    }
+    fn report_started(&self, _: u32, _: Option<&str>, total: i64) {
+      self.0.lock().unwrap().push(("started", total));
+    }
+    fn report_completion(&self, _: u32, _: Option<&str>) {}
+    fn report_stopped(&self, _: u32, _: Option<&str>) {}
+    fn report_cancelled(&self, _: u32, _: Option<&str>) {}
+    fn report_failed(&self, _: u32, _: Option<&str>, _: String) {}
+  }
+
+  #[tokio::test]
+  async fn response_size_is_reported_before_byte_progress_without_resuming_paused_tasks() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let desc = PDesc::new(1, Some("test".to_string()), -1, (), PStatus::Waiting);
+    let duration = Duration::from_millis(250);
+    let reporter = Reporter::new(-1, duration, RecordingSink(events.clone()));
+    let path = std::env::temp_dir().join(format!("bgumcl-progress-{}.json", uuid::Uuid::new_v4()));
+    let mut handle = PHandle::new(desc, duration, path.clone(), reporter);
+    handle.mark_started();
+    handle.set_total(1_000);
+    handle.set_total(1_000);
+    handle.set_current(250);
+    assert_eq!(
+      *events.lock().unwrap(),
+      vec![("started", -1), ("started", 1_000), ("progress", 1_000)]
+    );
+    handle.mark_stopped();
+    handle.set_total(2_000);
+    assert_eq!(events.lock().unwrap().len(), 3);
+    handle.mark_resumed();
+    assert_eq!(events.lock().unwrap().last(), Some(&("started", 2_000)));
+    std::fs::remove_file(path).unwrap();
   }
 }

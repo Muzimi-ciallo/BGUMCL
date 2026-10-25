@@ -54,6 +54,7 @@ export interface TaskGroupDesc {
   progress?: number;
   reason?: string;
   estimatedTime?: Duration; // estimated time remaining in seconds
+  description?: string;
 }
 
 export enum PTaskEventStatusEnums {

@@ -610,7 +610,7 @@ export class InstanceService {
     return await invoke("download_wanda_modpack");
   }
 
-  static async cancelWandaModpack(): Promise<InvokeResponse<void>> {
+  static async cancelWandaModpack(): Promise<void> {
     return await invoke("cancel_wanda_modpack");
   }
 

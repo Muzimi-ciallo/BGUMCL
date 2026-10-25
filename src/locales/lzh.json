@@ -641,7 +641,10 @@
       "paused": "已暫止",
       "completed": "已畢",
       "error": "未成",
-      "cancelled": "已罷"
+      "cancelled": "已罷",
+      "resolving": "備下載",
+      "downloading": "下載中",
+      "verifying": "校驗整合包"
     },
     "task": {
       "game-client": "戲客戶端 {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "OptiFine 行庫",
       "launcher-update": "迭更啟者",
       "extension-update": "迭更擴充套件 {{param1}} {{param2}}",
-      "mojang-java": "爪哇 {{param}} 行時"
+      "mojang-java": "爪哇 {{param}} 行時",
+      "wanda-modpack": "灣大伺服整合包"
     }
   },
   "Editable": {

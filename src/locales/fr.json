@@ -641,7 +641,10 @@
       "paused": "En pause",
       "completed": "Terminé.",
       "error": "Erreur",
-      "cancelled": "Annulé."
+      "cancelled": "Annulé.",
+      "resolving": "Préparation du téléchargement",
+      "downloading": "Téléchargement",
+      "verifying": "Vérification du modpack"
     },
     "task": {
       "game-client": "Client {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "Bibliothèques d'exécution d'OptiFine",
       "launcher-update": "Mettre à jour le lanceur",
       "extension-update": "Mettre à jour l'extension {{param1}} {{param2}}",
-      "mojang-java": "Java {{param}} fonctionne"
+      "mojang-java": "Java {{param}} fonctionne",
+      "wanda-modpack": "Modpack du serveur universitaire"
     }
   },
   "Editable": {

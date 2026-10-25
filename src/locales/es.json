@@ -641,7 +641,10 @@
       "paused": "Pausado",
       "completed": "Completado",
       "error": "Fallido",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "resolving": "Preparando descarga",
+      "downloading": "Descargando",
+      "verifying": "Verificando paquete"
     },
     "task": {
       "game-client": "Cliente del Juego {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "Librerías de OptiFine",
       "launcher-update": "Actualizar Lanzador",
       "extension-update": "Actualizar Extensión {{param1}} {{param2}}",
-      "mojang-java": "Tiempo de Ejecución de Java {{param}}"
+      "mojang-java": "Tiempo de Ejecución de Java {{param}}",
+      "wanda-modpack": "Paquete del servidor universitario"
     }
   },
   "Editable": {

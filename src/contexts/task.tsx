@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +14,7 @@ import { useGlobalData } from "@/contexts/global-data";
 import { useSharedModals } from "@/contexts/shared-modal";
 import { useToast } from "@/contexts/toast";
 import { OtherResourceType } from "@/enums/resource";
+import { useWandaDownloadTask } from "@/hooks/wanda-download-task";
 import {
   CreatedPTaskEventStatus,
   FailedPTaskEventStatus,
@@ -35,6 +37,8 @@ import {
 import { InstanceService } from "@/services/instance";
 import { RESOURCE_REFRESH_EVENT } from "@/services/resource";
 import { TaskService } from "@/services/task";
+import { logger } from "@/utils/logging";
+import { getDownloadProgress, isWandaTaskGroup } from "@/utils/task-progress";
 
 interface TaskContextType {
   tasks: TaskGroupDesc[];
@@ -48,6 +52,8 @@ interface TaskContextType {
   handleStopProgressiveTaskGroup: (taskGroup: string) => void;
   handleResumeProgressiveTaskGroup: (taskGroup: string) => void;
   handleClearHistoryTaskGroups: () => void;
+  handleDownloadWandaModpack: () => Promise<void>;
+  isDownloadingWanda: boolean;
 }
 
 export const TaskContext = createContext<TaskContextType | undefined>(
@@ -86,13 +92,19 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
     const completedProgress = group.taskDescs.reduce((acc, task) => {
       if (task.status === TaskDescStatusEnums.Completed) return acc + 1;
       if (task.total > 0) {
-        return acc + Math.min(1, Math.max(0, (task.current || 0) / task.total));
+        return acc + (getDownloadProgress(task.current, task.total) ?? 0) / 100;
       }
       return acc;
     }, 0);
     group.progress = group.taskDescs.length
       ? (completedProgress * 100) / group.taskDescs.length
-      : 0;
+      : undefined;
+    if (
+      group.finishedCount === 0 &&
+      !group.taskDescs.some((task) => task.total > 0)
+    ) {
+      group.progress = undefined;
+    }
 
     group.estimatedTime = undefined;
     group.taskDescs.forEach((t) => {
@@ -104,7 +116,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
           group.estimatedTime = t.estimatedTime;
         }
       }
-      t.progress = t.total ? (t.current * 100) / t.total : 0;
+      t.progress = getDownloadProgress(t.current, t.total);
     });
     group.taskDescs.sort((a, b) => {
       let level = (desc: TaskDesc) => {
@@ -124,6 +136,23 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
       return level(a) - level(b);
     });
   }, []);
+
+  const {
+    tasks: wandaTasks,
+    isDownloading: isDownloadingWanda,
+    start: handleDownloadWandaModpack,
+    cancel: cancelWandaDownload,
+    clearHistory: clearWandaHistory,
+  } = useWandaDownloadTask(updateGroupInfo);
+  const allTasks = useMemo(
+    () =>
+      [...tasks, ...wandaTasks].sort(
+        (a, b) =>
+          parseTaskGroup(b.taskGroup).timestamp -
+          parseTaskGroup(a.taskGroup).timestamp
+      ),
+    [tasks, wandaTasks]
+  );
 
   const handleRetrieveProgressTasks = useCallback(() => {
     TaskService.retrieveProgressiveTaskList().then((response) => {
@@ -186,6 +215,10 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const handleCancelProgressiveTaskGroup = useCallback(
     (taskGroup: string) => {
+      if (isWandaTaskGroup(taskGroup)) {
+        void cancelWandaDownload();
+        return;
+      }
       TaskService.cancelProgressiveTaskGroup(taskGroup).then((response) => {
         if (response.status === "success") {
           // Remove it immediately so a delayed backend event or a stale
@@ -206,7 +239,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
     },
-    [getInstanceList, toast]
+    [getInstanceList, toast, cancelWandaDownload]
   );
 
   const handleStopProgressiveTaskGroup = useCallback(
@@ -244,6 +277,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
     t.status === GTaskEventStatusEnums.Stopped;
 
   const handleClearHistoryTaskGroups = useCallback(() => {
+    clearWandaHistory();
     setTasks((prev) => {
       prev
         .filter((t) => !isActiveGroup(t))
@@ -252,7 +286,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
         });
       return prev.filter(isActiveGroup);
     });
-  }, []);
+  }, [clearWandaHistory]);
 
   useEffect(() => {
     const unlisten = TaskService.onProgressiveTaskUpdate(
@@ -727,13 +761,17 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
   ]);
 
   useEffect(() => {
-    if (!tasks || !tasks.length) setGeneralPercent(undefined);
+    if (!allTasks.length) setGeneralPercent(undefined);
     else {
-      let filteredTasks = tasks.filter(
+      let filteredTasks = allTasks.filter(
         (t) => t.status === GTaskEventStatusEnums.Started
       );
 
-      if (filteredTasks.length === 0) setGeneralPercent(undefined);
+      if (
+        filteredTasks.length === 0 ||
+        filteredTasks.every((group) => group.progress === undefined)
+      )
+        setGeneralPercent(undefined);
       else {
         setGeneralPercent(
           filteredTasks.reduce(
@@ -743,18 +781,20 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
         );
       }
     }
-  }, [tasks]);
+  }, [allTasks]);
 
   return (
     <TaskContext.Provider
       value={{
-        tasks,
+        tasks: allTasks,
         generalPercent,
         handleScheduleProgressiveTaskGroup,
         handleCancelProgressiveTaskGroup,
         handleStopProgressiveTaskGroup,
         handleResumeProgressiveTaskGroup,
         handleClearHistoryTaskGroups,
+        handleDownloadWandaModpack,
+        isDownloadingWanda,
       }}
     >
       {children}

@@ -33,6 +33,7 @@ import {
 } from "@/models/task";
 import { formatTimeInterval } from "@/utils/datetime";
 import { formatByteSize } from "@/utils/string";
+import { isWandaTaskGroup } from "@/utils/task-progress";
 
 export const DownloadTasksPage = () => {
   const { t } = useTranslation();
@@ -47,6 +48,8 @@ export const DownloadTasksPage = () => {
     handleStopProgressiveTaskGroup,
     handleResumeProgressiveTaskGroup,
     handleClearHistoryTaskGroups,
+    handleDownloadWandaModpack,
+    isDownloadingWanda,
   } = useTaskContext();
 
   const [taskGroupList, setTaskGroupList] = useState<
@@ -74,10 +77,12 @@ export const DownloadTasksPage = () => {
 
   const showTaskProgressInfo = (task: TaskDesc) => {
     let text = [];
-    if (task.total) {
+    if (task.total > 0) {
       text.push(
         `${formatByteSize(task.current)} / ${formatByteSize(task.total)}`
       );
+    } else if (task.current > 0) {
+      text.push(formatByteSize(task.current));
     }
     if (task.speed) {
       text.push(`${formatByteSize(task.speed)}/s`);
@@ -175,41 +180,44 @@ export const DownloadTasksPage = () => {
                       </Text>
                     )}
 
-                    {(group.status === GTaskEventStatusEnums.Stopped ||
-                      group.status === GTaskEventStatusEnums.Started) && (
-                      <Tooltip
-                        label={t(
-                          `DownloadTasksPage.button.${
-                            group.status === GTaskEventStatusEnums.Started
-                              ? "pause"
-                              : "begin"
-                          }`
-                        )}
-                      >
-                        <IconButton
-                          aria-label="pause / download"
-                          icon={
-                            group.status === GTaskEventStatusEnums.Started ? (
-                              <LuPause />
-                            ) : (
-                              <LuPlay />
-                            )
-                          }
-                          size="xs"
-                          fontSize="sm"
-                          h={21}
-                          ml={1}
-                          variant="ghost"
-                          onClick={() => {
-                            group.status === GTaskEventStatusEnums.Started
-                              ? handleStopProgressiveTaskGroup(group.taskGroup)
-                              : handleResumeProgressiveTaskGroup(
-                                  group.taskGroup
-                                );
-                          }}
-                        />
-                      </Tooltip>
-                    )}
+                    {!isWandaTaskGroup(group.taskGroup) &&
+                      (group.status === GTaskEventStatusEnums.Stopped ||
+                        group.status === GTaskEventStatusEnums.Started) && (
+                        <Tooltip
+                          label={t(
+                            `DownloadTasksPage.button.${
+                              group.status === GTaskEventStatusEnums.Started
+                                ? "pause"
+                                : "begin"
+                            }`
+                          )}
+                        >
+                          <IconButton
+                            aria-label="pause / download"
+                            icon={
+                              group.status === GTaskEventStatusEnums.Started ? (
+                                <LuPause />
+                              ) : (
+                                <LuPlay />
+                              )
+                            }
+                            size="xs"
+                            fontSize="sm"
+                            h={21}
+                            ml={1}
+                            variant="ghost"
+                            onClick={() => {
+                              group.status === GTaskEventStatusEnums.Started
+                                ? handleStopProgressiveTaskGroup(
+                                    group.taskGroup
+                                  )
+                                : handleResumeProgressiveTaskGroup(
+                                    group.taskGroup
+                                  );
+                            }}
+                          />
+                        </Tooltip>
+                      )}
 
                     {(group.status === GTaskEventStatusEnums.Failed ||
                       group.status === GTaskEventStatusEnums.Cancelled) && (
@@ -223,6 +231,11 @@ export const DownloadTasksPage = () => {
                           ml={1}
                           variant="ghost"
                           onClick={() => {
+                            if (isWandaTaskGroup(group.taskGroup)) {
+                              if (!isDownloadingWanda)
+                                void handleDownloadWandaModpack();
+                              return;
+                            }
                             const isFailedGroup =
                               group.status === GTaskEventStatusEnums.Failed;
                             const retryParams = group.taskDescs
@@ -280,10 +293,21 @@ export const DownloadTasksPage = () => {
                   </HStack>
                 </Flex>
 
+                {group.description && (
+                  <Text fontSize="xs" className="secondary-text">
+                    {group.description}
+                  </Text>
+                )}
+
                 {group.status !== GTaskEventStatusEnums.Completed && (
                   <Progress
                     size="xs"
                     value={group.progress}
+                    minH="4px"
+                    isIndeterminate={
+                      group.status === GTaskEventStatusEnums.Started &&
+                      group.progress === undefined
+                    }
                     colorScheme={primaryColor}
                     borderRadius="sm"
                     mb={1}
@@ -316,7 +340,9 @@ export const DownloadTasksPage = () => {
                             value={task.progress}
                             colorScheme={primaryColor}
                             isIndeterminate={
-                              task.status === TaskDescStatusEnums.Waiting
+                              task.status === TaskDescStatusEnums.Waiting ||
+                              (task.status === TaskDescStatusEnums.InProgress &&
+                                task.total <= 0)
                             }
                             borderRadius="sm"
                           />

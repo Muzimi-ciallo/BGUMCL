@@ -641,7 +641,10 @@
       "paused": "Paused",
       "completed": "Completed",
       "error": "Failed",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "resolving": "Preparing download",
+      "downloading": "Downloading",
+      "verifying": "Verifying modpack"
     },
     "task": {
       "game-client": "Game Client {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "OptiFine Libraries",
       "launcher-update": "Update Launcher",
       "extension-update": "Update Extension {{param1}} {{param2}}",
-      "mojang-java": "Java {{param}} Runtime"
+      "mojang-java": "Java {{param}} Runtime",
+      "wanda-modpack": "University server modpack"
     }
   },
   "Editable": {

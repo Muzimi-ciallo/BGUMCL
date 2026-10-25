@@ -641,7 +641,10 @@
       "paused": "已暫停",
       "completed": "已完成",
       "error": "失敗",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "resolving": "正在準備下載",
+      "downloading": "正在下載",
+      "verifying": "正在驗證整合包"
     },
     "task": {
       "game-client": "遊戲用戶端 {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "OptiFine 執行庫",
       "launcher-update": "更新啟動器",
       "extension-update": "更新擴充套件 {{param1}} {{param2}}",
-      "mojang-java": "Java {{param}} 執行時"
+      "mojang-java": "Java {{param}} 執行時",
+      "wanda-modpack": "灣大伺服器整合包"
     }
   },
   "Editable": {

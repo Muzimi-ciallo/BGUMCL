@@ -641,7 +641,10 @@
       "paused": "一時停止中",
       "completed": "完了",
       "error": "エラー",
-      "cancelled": "キャンセル済み"
+      "cancelled": "キャンセル済み",
+      "resolving": "ダウンロードを準備中",
+      "downloading": "ダウンロード中",
+      "verifying": "Modパックを検証中"
     },
     "task": {
       "game-client": "ゲームクライアント {{param}}",
@@ -665,7 +668,8 @@
       "optifine-libraries": "OptiFine ランタイムライブラリ",
       "launcher-update": "ランチャーを更新",
       "extension-update": "拡張機能 {{param1}} {{param2}} を更新",
-      "mojang-java": "Java {{param}} ランタイム"
+      "mojang-java": "Java {{param}} ランタイム",
+      "wanda-modpack": "大学サーバーのModパック"
     }
   },
   "Editable": {

@@ -13,7 +13,6 @@ import {
 } from "@chakra-ui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useRouter } from "next/router";
-import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuArrowRight, LuCloudDownload, LuFolderPlus } from "react-icons/lu";
 import {
@@ -23,83 +22,18 @@ import {
 import { CreateInstanceModal } from "@/components/modals/create-instance-modal";
 import { DownloadGameServerModal } from "@/components/modals/download-game-server-modal";
 import DownloadModpackModal from "@/components/modals/download-modpack-modal";
-import { WandaDownloadProgressModal } from "@/components/modals/wanda-download-progress-modal";
 import { useSharedModals } from "@/contexts/shared-modal";
-import { useToast } from "@/contexts/toast";
-import { InstanceService, WandaDownloadProgress } from "@/services/instance";
+import { useTaskContext } from "@/contexts/task";
 
 const AddAndImportInstancePage = () => {
   const { t } = useTranslation();
   const router = useRouter();
   const { openSharedModal } = useSharedModals();
-  const toast = useToast();
-  const [isDownloadingWanda, setIsDownloadingWanda] = useState(false);
-  const [isWandaProgressVisible, setIsWandaProgressVisible] = useState(false);
-  const [isCancellingWanda, setIsCancellingWanda] = useState(false);
-  const wandaCancelledRef = useRef(false);
-  const [wandaProgress, setWandaProgress] = useState<WandaDownloadProgress>({
-    phase: "resolving",
-    current: 0,
-    total: null,
-    speed: 0,
-    source: "",
-    message: null,
-  });
-
-  const handleDownloadWandaModpack = async () => {
-    if (isDownloadingWanda) return;
-    setIsDownloadingWanda(true);
-    setIsWandaProgressVisible(true);
-    setIsCancellingWanda(false);
-    wandaCancelledRef.current = false;
-    setWandaProgress({
-      phase: "resolving",
-      current: 0,
-      total: null,
-      speed: 0,
-      source: "",
-      message: null,
-    });
-    const stopProgressListener =
-      InstanceService.onWandaDownloadProgress(setWandaProgress);
-    try {
-      const res = await InstanceService.downloadWandaModpack();
-      if (res.status === "success") {
-        openSharedModal("import-modpack", {
-          path: res.data,
-          modpackUpdateChannel:
-            "https://gitee.com/Muzimimiao/BBGU-Minecraft-sever/raw/main/sjmcl-update.json",
-        });
-      } else if (!wandaCancelledRef.current) {
-        toast({
-          title: res.message,
-          description: res.details,
-          status: "error",
-        });
-      }
-    } catch (error) {
-      if (!wandaCancelledRef.current) {
-        toast({ title: String(error), status: "error" });
-      }
-    } finally {
-      stopProgressListener();
-      setIsWandaProgressVisible(false);
-      setIsCancellingWanda(false);
-      setIsDownloadingWanda(false);
-    }
-  };
-
-  const handleCancelWandaModpack = async () => {
-    if (!isDownloadingWanda || isCancellingWanda) return;
-    wandaCancelledRef.current = true;
-    setIsCancellingWanda(true);
-    try {
-      await InstanceService.cancelWandaModpack();
-    } catch (error) {
-      wandaCancelledRef.current = false;
-      setIsCancellingWanda(false);
-      toast({ title: String(error), status: "error" });
-    }
+  const { isDownloadingWanda, handleDownloadWandaModpack: startWandaDownload } =
+    useTaskContext();
+  const handleDownloadWandaModpack = () => {
+    if (!isDownloadingWanda) void startWandaDownload();
+    void router.push("/downloads");
   };
 
   const {
@@ -245,13 +179,6 @@ const AddAndImportInstancePage = () => {
       <DownloadGameServerModal
         isOpen={isDownloadGameServerModalOpen}
         onClose={onCloseDownloadGameServerModal}
-      />
-      <WandaDownloadProgressModal
-        isOpen={isWandaProgressVisible}
-        progress={wandaProgress}
-        isCancelling={isCancellingWanda}
-        onClose={() => setIsWandaProgressVisible(false)}
-        onCancel={handleCancelWandaModpack}
       />
     </>
   );
