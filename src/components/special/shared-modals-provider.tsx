@@ -10,6 +10,7 @@ import ExtensionInfoModal from "@/components/modals/extension-info-modal";
 import GenericConfirmDialog from "@/components/modals/generic-confirm-dialog";
 import ImportModpackModal from "@/components/modals/import-modpack-modal";
 import LaunchProcessModal from "@/components/modals/launch-process-modal";
+import ModpackIntegrityModal from "@/components/modals/modpack-integrity-modal";
 import NotifyNewVersionModal from "@/components/modals/notify-new-version-modal";
 import ReLoginPlayerModal from "@/components/modals/relogin-player-modal";
 import SpotlightSearchModal from "@/components/modals/spotlight-search-modal";
@@ -60,6 +61,7 @@ const SharedModals: React.FC<{ children: React.ReactNode }> = ({
     "extension-info": ExtensionInfoModal,
     "generic-confirm": GenericConfirmDialog,
     "import-modpack": ImportModpackModal,
+    "modpack-integrity": ModpackIntegrityModal,
     launch: LaunchProcessModal,
     "notify-new-version": NotifyNewVersionModal,
     relogin: ReLoginPlayerModal,

@@ -526,6 +526,7 @@ export const TaskContextProvider: React.FC<{ children: React.ReactNode }> = ({
                 getInstanceList(true);
                 break;
               case "modpack-github-update":
+              case "modpack-integrity":
                 getInstanceList(true);
                 break;
               case "game-client-w-java":

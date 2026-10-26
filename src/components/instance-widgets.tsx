@@ -28,14 +28,17 @@ import {
   LuCalendarClock,
   LuClock4,
   LuEarth,
+  LuFolderOpen,
   LuFullscreen,
   LuHaze,
   LuLink2,
   LuPackage,
   LuRefreshCw,
   LuSave,
+  LuScanLine,
   LuSettings,
   LuShapes,
+  LuShieldCheck,
   LuSquareLibrary,
 } from "react-icons/lu";
 import { BeatLoader } from "react-spinners";
@@ -505,6 +508,71 @@ export const InstanceMoreWidget = () => {
           )
         )}
       </Grid>
+    </InstanceWidgetBase>
+  );
+};
+
+export const InstanceModpackIntegrityWidget = () => {
+  const { t } = useTranslation();
+  const { instanceId, summary } = useInstanceSharedData();
+  const { config } = useLauncherConfig();
+  const { openSharedModal } = useSharedModals();
+  const toast = useToast();
+
+  const handleOpenCache = async () => {
+    try {
+      const response = await InstanceService.openDownloadCache();
+      if (response.status === "error") throw new Error(response.details);
+    } catch (error) {
+      toast({
+        title: t("ModpackIntegrity.cacheError"),
+        description: String(error),
+        status: "error",
+      });
+    }
+  };
+
+  return (
+    <InstanceWidgetBase
+      title={t("ModpackIntegrity.title")}
+      icon={LuShieldCheck}
+    >
+      <Text fontSize="xs" className="secondary-text" zIndex={998}>
+        {t("ModpackIntegrity.cardDescription")}
+      </Text>
+      <VStack
+        align="start"
+        spacing={0}
+        position="absolute"
+        left={2}
+        bottom={2}
+        zIndex={998}
+      >
+        <Button
+          size="xs"
+          variant="ghost"
+          colorScheme={config.appearance.theme.primaryColor}
+          leftIcon={<LuScanLine />}
+          isDisabled={!instanceId}
+          onClick={() =>
+            openSharedModal("modpack-integrity", {
+              instanceId,
+              instanceName: summary?.name || instanceId,
+            })
+          }
+        >
+          {t("ModpackIntegrity.chooseAndVerify")}
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          colorScheme={config.appearance.theme.primaryColor}
+          leftIcon={<LuFolderOpen />}
+          onClick={handleOpenCache}
+        >
+          {t("ModpackIntegrity.openCache")}
+        </Button>
+      </VStack>
     </InstanceWidgetBase>
   );
 };

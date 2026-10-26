@@ -9,6 +9,8 @@ import {
   InstanceSummary,
   LocalModInfo,
   ModpackFileList,
+  ModpackIntegrityRepairResult,
+  ModpackIntegrityReport,
   ModpackMetaInfo,
   ResourcePackInfo,
   SchematicInfo,
@@ -45,6 +47,32 @@ export interface WandaDownloadProgress {
  * Service class for managing instances and its local resources.
  */
 export class InstanceService {
+  @responseHandler("instance")
+  static async openDownloadCache(): Promise<InvokeResponse<void>> {
+    return await invoke("open_download_cache");
+  }
+
+  @responseHandler("instance")
+  static async scanModpackIntegrity(
+    instanceId: string,
+    archivePath: string
+  ): Promise<InvokeResponse<ModpackIntegrityReport>> {
+    return await invoke("scan_modpack_integrity", { instanceId, archivePath });
+  }
+
+  @responseHandler("instance")
+  static async repairModpackIntegrity(
+    instanceId: string,
+    scanId: string,
+    selectedIds: string[]
+  ): Promise<InvokeResponse<ModpackIntegrityRepairResult>> {
+    return await invoke("repair_modpack_integrity", {
+      instanceId,
+      scanId,
+      selectedIds,
+    });
+  }
+
   /**
    * RETRIEVE the list of local instances.
    * @returns {Promise<InvokeResponse<InstanceSummary[]>>}

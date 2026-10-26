@@ -669,7 +669,8 @@
       "launcher-update": "Update Launcher",
       "extension-update": "Update Extension {{param1}} {{param2}}",
       "mojang-java": "Java {{param}} Runtime",
-      "wanda-modpack": "University server modpack"
+      "wanda-modpack": "University server modpack",
+      "modpack-integrity": "Repair pack mods {{param}}"
     }
   },
   "Editable": {
@@ -1892,6 +1893,38 @@
       "OFFLINE": "Offline"
     }
   },
+  "ModpackIntegrity": {
+    "title": "Verify pack integrity",
+    "cardDescription": "Use the original ZIP to check for missing or damaged mods.",
+    "chooseAndVerify": "Choose original ZIP to verify",
+    "openCache": "Open download cache",
+    "cacheError": "Could not open download cache",
+    "description": "Choose the original archive for this instance. Scanning does not change files. Repair only selected missing or damaged mods; extra and disabled mods, settings and saves are preserved. CurseForge metadata requires a network connection.",
+    "archiveFilter": "Modpack archives",
+    "choose": "Choose original ZIP",
+    "scan": "Start scan",
+    "rescan": "Scan again",
+    "scanning": "Reading the archive and checking mods; remote metadata may take a few minutes…",
+    "selectAll": "Select all repairable",
+    "onlyIssues": "Show issues only",
+    "noMods": "No client mods found in this archive.",
+    "noIssues": "No missing, damaged or unverified mods found.",
+    "waitDownloads": "Wait for current downloads to finish before repairing.",
+    "repair": "Repair selected ({{count}})",
+    "repairStarted": "Restored {{restored}} bundled mods; queued {{queued}} downloads.",
+    "status": {
+      "valid": "Valid",
+      "missing": "Missing",
+      "corrupted": "Damaged",
+      "disabled": "Disabled",
+      "optional": "Optional · absent",
+      "unverified": "Unverified"
+    },
+    "source": {
+      "remote": "Download",
+      "archive": "Bundled in ZIP"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "No suitable Java runtime found for this instance",
     "body": "No suitable Java runtime is available for this instance. Click \"Confirm\" to open Java Management page and add or download Java manually."
@@ -3082,6 +3115,24 @@
         "success": "Successfully added custom instance icon",
         "error": {
           "title": "Failed to add custom instance icon"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "Scan complete",
+        "error": {
+          "title": "Scan failed"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "Repair queued",
+        "error": {
+          "title": "Repair failed"
+        }
+      },
+      "openDownloadCache": {
+        "success": "Cache opened",
+        "error": {
+          "title": "Could not open cache"
         }
       }
     },

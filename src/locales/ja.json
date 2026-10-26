@@ -669,7 +669,8 @@
       "launcher-update": "ランチャーを更新",
       "extension-update": "拡張機能 {{param1}} {{param2}} を更新",
       "mojang-java": "Java {{param}} ランタイム",
-      "wanda-modpack": "大学サーバーのModパック"
+      "wanda-modpack": "大学サーバーのModパック",
+      "modpack-integrity": "パック MOD を修復 {{param}}"
     }
   },
   "Editable": {
@@ -1889,6 +1890,38 @@
       "OFFLINE": "オフライン"
     }
   },
+  "ModpackIntegrity": {
+    "title": "パックの整合性を確認",
+    "cardDescription": "元の ZIP で不足・破損した MOD を確認",
+    "chooseAndVerify": "元の ZIP を選んで確認",
+    "openCache": "ダウンロードキャッシュを開く",
+    "cacheError": "キャッシュを開けませんでした",
+    "description": "このインスタンスの元のパックを選んでください。スキャンはファイルを変更しません。選択した不足・破損 MOD のみ修復し、追加・無効化した MOD、設定、ワールドは保持します。CurseForge の情報取得には通信が必要です。",
+    "archiveFilter": "Mod パック",
+    "choose": "元の ZIP を選択",
+    "scan": "スキャン開始",
+    "rescan": "再スキャン",
+    "scanning": "パックと MOD を確認中です。情報取得には数分かかる場合があります…",
+    "selectAll": "修復可能な項目をすべて選択",
+    "onlyIssues": "問題のみ表示",
+    "noMods": "クライアント用 MOD が見つかりません。",
+    "noIssues": "不足・破損・未確認の MOD はありません。",
+    "waitDownloads": "現在のダウンロード完了後に修復してください。",
+    "repair": "選択項目を修復（{{count}}）",
+    "repairStarted": "同梱 MOD を {{restored}} 個復元し、{{queued}} 件をダウンロードに追加しました。",
+    "status": {
+      "valid": "正常",
+      "missing": "不足",
+      "corrupted": "破損",
+      "disabled": "無効",
+      "optional": "任意・未導入",
+      "unverified": "未確認"
+    },
+    "source": {
+      "remote": "ダウンロード",
+      "archive": "ZIP に同梱"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "このインスタンスに適した Java ランタイムが見つかりません",
     "body": "このインスタンスで利用可能な適切な Java ランタイムがありません。「確認」をクリックして Java 管理ページを開き、Java を手動で追加またはダウンロードしてください。"
@@ -3079,6 +3112,24 @@
         "success": "カスタムインスタンスアイコンを追加しました",
         "error": {
           "title": "カスタムインスタンスアイコンの追加に失敗しました"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "スキャン完了",
+        "error": {
+          "title": "スキャン失敗"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "修復を追加しました",
+        "error": {
+          "title": "修復失敗"
+        }
+      },
+      "openDownloadCache": {
+        "success": "キャッシュを開きました",
+        "error": {
+          "title": "キャッシュを開けませんでした"
         }
       }
     },

@@ -57,6 +57,31 @@ export interface ModpackFileList {
   unchecked: string[];
 }
 
+export type ModpackIntegrityStatus =
+  | "valid"
+  | "missing"
+  | "corrupted"
+  | "disabled"
+  | "optional"
+  | "unverified";
+
+export interface ModpackIntegrityReport {
+  scanId: string;
+  packName: string;
+  entries: {
+    id: string;
+    path: string;
+    status: ModpackIntegrityStatus;
+    source: "remote" | "archive";
+    detail?: string;
+  }[];
+}
+
+export interface ModpackIntegrityRepairResult {
+  restored: number;
+  queued: number;
+}
+
 export interface ExportModpackOptions {
   format: ExportModpackFormat;
   name: string;

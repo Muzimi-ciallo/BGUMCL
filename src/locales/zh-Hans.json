@@ -669,7 +669,8 @@
       "launcher-update": "更新启动器",
       "extension-update": "更新扩展 {{param1}} {{param2}}",
       "mojang-java": "Java {{param}} 运行时",
-      "wanda-modpack": "湾大服务器整合包"
+      "wanda-modpack": "湾大服务器整合包",
+      "modpack-integrity": "补齐整合包 MOD {{param}}"
     }
   },
   "Editable": {
@@ -1892,6 +1893,38 @@
       "OFFLINE": "离线"
     }
   },
+  "ModpackIntegrity": {
+    "title": "验证包完整性",
+    "cardDescription": "使用原 ZIP 检查缺失或损坏的 MOD",
+    "chooseAndVerify": "选择原 ZIP 验证",
+    "openCache": "打开下载缓存",
+    "cacheError": "无法打开下载缓存",
+    "description": "请选择当前实例对应的原整合包。扫描不会修改文件；补齐仅处理勾选的缺失或损坏 MOD，保留额外及已禁用的 MOD、配置和存档。CurseForge 元数据查询需要联网。",
+    "archiveFilter": "整合包文件",
+    "choose": "选择原 ZIP",
+    "scan": "开始扫描",
+    "rescan": "重新扫描",
+    "scanning": "正在读取整合包并校验 MOD，远程元数据查询可能需要几分钟…",
+    "selectAll": "全选可补齐项",
+    "onlyIssues": "仅显示问题",
+    "noMods": "原整合包中未找到客户端 MOD。",
+    "noIssues": "未发现缺失、损坏或无法验证的 MOD。",
+    "waitDownloads": "请等待当前下载完成后再补齐。",
+    "repair": "补齐所选（{{count}}）",
+    "repairStarted": "已恢复 {{restored}} 个内置 MOD，{{queued}} 个文件已加入下载队列。",
+    "status": {
+      "valid": "完整",
+      "missing": "缺失",
+      "corrupted": "损坏",
+      "disabled": "已禁用",
+      "optional": "可选·未安装",
+      "unverified": "无法验证"
+    },
+    "source": {
+      "remote": "远程下载",
+      "archive": "ZIP 内置"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "未找到合适的 Java 运行时",
     "body": "对于当前实例，没有合适的 Java 运行时可供选择。点击“确定”以前往 Java 管理页面手动添加或下载 Java。"
@@ -3083,6 +3116,24 @@
         "success": "自定义实例图标添加成功",
         "error": {
           "title": "自定义实例图标添加失败"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "扫描完成",
+        "error": {
+          "title": "扫描失败"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "补齐任务已提交",
+        "error": {
+          "title": "补齐失败"
+        }
+      },
+      "openDownloadCache": {
+        "success": "已打开下载缓存",
+        "error": {
+          "title": "无法打开下载缓存"
         }
       }
     },

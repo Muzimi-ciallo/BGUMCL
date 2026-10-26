@@ -165,6 +165,9 @@ pub async fn run() {
         instance::commands::retrieve_exportable_file_list,
         instance::commands::export_modpack,
         instance::helpers::modpack::github::check_github_modpack_update,
+        instance::helpers::modpack::integrity::scan_modpack_integrity,
+        instance::helpers::modpack::integrity::open_download_cache,
+        instance::helpers::modpack::integrity::repair_modpack_integrity,
         instance::helpers::modpack::github::apply_github_modpack_update,
         instance::helpers::modpack::github::set_github_modpack_update_channel,
         instance::helpers::modpack::github::set_modpack_version,
@@ -252,6 +255,7 @@ pub async fn run() {
         // from a task display name.
         app.manage(Mutex::new(PendingInstanceCreationMap::new()));
         app.manage(WandaDownloadControl::default());
+        app.manage(instance::helpers::modpack::integrity::IntegrityScans::default());
 
         let javas: Vec<JavaInfo> = vec![];
         app.manage(Mutex::new(javas));

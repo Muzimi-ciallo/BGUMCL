@@ -669,7 +669,8 @@
       "launcher-update": "Actualizar Lanzador",
       "extension-update": "Actualizar Extensión {{param1}} {{param2}}",
       "mojang-java": "Tiempo de Ejecución de Java {{param}}",
-      "wanda-modpack": "Paquete del servidor universitario"
+      "wanda-modpack": "Paquete del servidor universitario",
+      "modpack-integrity": "Reparar mods del paquete {{param}}"
     }
   },
   "Editable": {
@@ -1889,6 +1890,38 @@
       "OFFLINE": "Desconectado"
     }
   },
+  "ModpackIntegrity": {
+    "title": "Verificar integridad del paquete",
+    "cardDescription": "Busca mods ausentes o dañados con el ZIP original.",
+    "chooseAndVerify": "Elegir ZIP original para verificar",
+    "openCache": "Abrir caché de descargas",
+    "cacheError": "No se pudo abrir la caché",
+    "description": "Elige el paquete original de esta instancia. El análisis no modifica archivos. Solo se reparan los mods ausentes o dañados seleccionados; se conservan los mods añadidos o desactivados, los ajustes y las partidas. Los metadatos de CurseForge requieren Internet.",
+    "archiveFilter": "Archivos de modpacks",
+    "choose": "Elegir ZIP original",
+    "scan": "Iniciar análisis",
+    "rescan": "Volver a analizar",
+    "scanning": "Leyendo el paquete y verificando mods; los metadatos pueden tardar unos minutos…",
+    "selectAll": "Seleccionar todos los reparables",
+    "onlyIssues": "Mostrar solo problemas",
+    "noMods": "No se encontraron mods de cliente en este archivo.",
+    "noIssues": "No hay mods ausentes, dañados ni sin verificar.",
+    "waitDownloads": "Espera a que terminen las descargas antes de reparar.",
+    "repair": "Reparar selección ({{count}})",
+    "repairStarted": "Se restauraron {{restored}} mods incluidos y se añadieron {{queued}} descargas.",
+    "status": {
+      "valid": "Correcto",
+      "missing": "Ausente",
+      "corrupted": "Dañado",
+      "disabled": "Desactivado",
+      "optional": "Opcional · ausente",
+      "unverified": "Sin verificar"
+    },
+    "source": {
+      "remote": "Descarga",
+      "archive": "Incluido en ZIP"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "No se encontró un entorno de ejecución Java adecuado para esta instancia",
     "body": "No hay un entorno de ejecución Java adecuado disponible para esta instancia. Haz clic en \"Confirmar\" para abrir la página de gestión de Java y agregar o descargar Java manualmente."
@@ -3079,6 +3112,24 @@
         "success": "Icono personalizado de instancia agregado exitosamente",
         "error": {
           "title": "Error al agregar el icono personalizado de instancia"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "Análisis completo",
+        "error": {
+          "title": "Error al analizar"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "Reparación añadida",
+        "error": {
+          "title": "Error al reparar"
+        }
+      },
+      "openDownloadCache": {
+        "success": "Caché abierta",
+        "error": {
+          "title": "No se pudo abrir la caché"
         }
       }
     },

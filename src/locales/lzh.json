@@ -669,7 +669,8 @@
       "launcher-update": "迭更啟者",
       "extension-update": "迭更擴充套件 {{param1}} {{param2}}",
       "mojang-java": "爪哇 {{param}} 行時",
-      "wanda-modpack": "灣大伺服整合包"
+      "wanda-modpack": "灣大伺服整合包",
+      "modpack-integrity": "補整合包模組 {{param}}"
     }
   },
   "Editable": {
@@ -1889,6 +1890,38 @@
       "OFFLINE": "離線"
     }
   },
+  "ModpackIntegrity": {
+    "title": "驗包完整",
+    "cardDescription": "以原 ZIP 查模組之缺損",
+    "chooseAndVerify": "擇原 ZIP 驗證",
+    "openCache": "開下載暫存",
+    "cacheError": "未能開下載暫存",
+    "description": "請擇此實例之原整合包。查驗不改檔案；僅補所選缺損模組，保留另加及停用模組、設定與存檔。CurseForge 資料須聯網查詢。",
+    "archiveFilter": "整合包",
+    "choose": "擇原 ZIP",
+    "scan": "始查",
+    "rescan": "重查",
+    "scanning": "正讀整合包、驗模組；遠端查詢或需數分鐘…",
+    "selectAll": "全選可補者",
+    "onlyIssues": "僅示異常",
+    "noMods": "原包無客戶端模組。",
+    "noIssues": "未見缺損或未驗模組。",
+    "waitDownloads": "請俟下載畢而後補。",
+    "repair": "補所選（{{count}}）",
+    "repairStarted": "已復原內置模組 {{restored}} 個，另入下載佇列 {{queued}} 個。",
+    "status": {
+      "valid": "完整",
+      "missing": "缺失",
+      "corrupted": "損壞",
+      "disabled": "停用",
+      "optional": "可選未裝",
+      "unverified": "未能驗證"
+    },
+    "source": {
+      "remote": "遠端下載",
+      "archive": "ZIP 內置"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "未找到合宜爪哇行時",
     "body": "於今例，無合宜之爪哇行時可擇。點選“然”以前往爪哇司頁，手動增抑引爪哇。"
@@ -3079,6 +3112,24 @@
         "success": "自定例圖示增既成",
         "error": {
           "title": "自定例圖示增未成"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "查驗畢",
+        "error": {
+          "title": "查驗未成"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "補齊任務已交",
+        "error": {
+          "title": "補齊未成"
+        }
+      },
+      "openDownloadCache": {
+        "success": "已開下載暫存",
+        "error": {
+          "title": "未能開暫存"
         }
       }
     },

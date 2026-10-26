@@ -3,6 +3,7 @@ import { WrapCardGroup } from "@/components/common/wrap-card";
 import {
   InstanceBasicInfoWidget,
   InstanceLastPlayedWidget,
+  InstanceModpackIntegrityWidget,
   InstanceModpackUpdateWidget,
   InstanceModsWidget,
   InstanceMoreWidget,
@@ -17,6 +18,7 @@ const InstanceOverviewPage = () => {
     { content: <InstanceModpackUpdateWidget />, colSpan: 1 },
     { content: <InstanceScreenshotsWidget />, colSpan: 1 },
     { content: <InstanceMoreWidget />, colSpan: 1 },
+    { content: <InstanceModpackIntegrityWidget />, colSpan: 1 },
   ];
 
   return (

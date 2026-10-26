@@ -669,7 +669,8 @@
       "launcher-update": "更新啟動器",
       "extension-update": "更新擴充套件 {{param1}} {{param2}}",
       "mojang-java": "Java {{param}} 執行時",
-      "wanda-modpack": "灣大伺服器整合包"
+      "wanda-modpack": "灣大伺服器整合包",
+      "modpack-integrity": "補齊整合包 MOD {{param}}"
     }
   },
   "Editable": {
@@ -1889,6 +1890,38 @@
       "OFFLINE": "離線"
     }
   },
+  "ModpackIntegrity": {
+    "title": "驗證包完整性",
+    "cardDescription": "使用原 ZIP 檢查缺失或損壞的 MOD",
+    "chooseAndVerify": "選擇原 ZIP 驗證",
+    "openCache": "開啟下載快取",
+    "cacheError": "無法開啟下載快取",
+    "description": "請選擇目前實例對應的原整合包。掃描不會修改檔案；補齊僅處理勾選的缺失或損壞 MOD，保留額外及已停用的 MOD、設定與存檔。CurseForge 中繼資料查詢需要連線。",
+    "archiveFilter": "整合包檔案",
+    "choose": "選擇原 ZIP",
+    "scan": "開始掃描",
+    "rescan": "重新掃描",
+    "scanning": "正在讀取整合包並驗證 MOD，遠端中繼資料查詢可能需要幾分鐘…",
+    "selectAll": "全選可補齊項",
+    "onlyIssues": "僅顯示問題",
+    "noMods": "原整合包中未找到用戶端 MOD。",
+    "noIssues": "未發現缺失、損壞或無法驗證的 MOD。",
+    "waitDownloads": "請等待目前下載完成後再補齊。",
+    "repair": "補齊所選（{{count}}）",
+    "repairStarted": "已還原 {{restored}} 個內建 MOD，{{queued}} 個檔案已加入下載佇列。",
+    "status": {
+      "valid": "完整",
+      "missing": "缺失",
+      "corrupted": "損壞",
+      "disabled": "已停用",
+      "optional": "可選·未安裝",
+      "unverified": "無法驗證"
+    },
+    "source": {
+      "remote": "遠端下載",
+      "archive": "ZIP 內建"
+    }
+  },
   "NoSuitableJavaDialog": {
     "title": "未找到合適的 Java 執行時",
     "body": "對於目前實例，沒有合適的 Java 執行時可供選擇。點擊「確定」以前往 Java 管理頁面手動新增或下載 Java。"
@@ -3079,6 +3112,24 @@
         "success": "自訂實例圖示新增成功",
         "error": {
           "title": "自訂實例圖示新增失敗"
+        }
+      },
+      "scanModpackIntegrity": {
+        "success": "掃描完成",
+        "error": {
+          "title": "掃描失敗"
+        }
+      },
+      "repairModpackIntegrity": {
+        "success": "補齊工作已提交",
+        "error": {
+          "title": "補齊失敗"
+        }
+      },
+      "openDownloadCache": {
+        "success": "已開啟下載快取",
+        "error": {
+          "title": "無法開啟下載快取"
         }
       }
     },
