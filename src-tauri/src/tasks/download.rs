@@ -832,59 +832,77 @@ impl DownloadTask {
       }
     };
     let authenticated = is_curseforge_authenticated_url(&url);
-    let mut request = match range_end {
-      Some(end) => client
-        .get(url)
-        .header(RANGE, format!("bytes={current}-{end}")),
-      None if current > 0 => client.get(url).header(RANGE, format!("bytes={current}-")),
-      None => client.get(url),
-    }
-    .header("Accept-Encoding", "identity");
-    if authenticated && !CURSEFORGE_API_KEY.is_empty() {
-      request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
-    }
-    if candidate.contains("bmclapi") {
-      let mut last_request = request_gate.lock().await;
-      let elapsed = last_request.elapsed();
-      if elapsed < BMCLAPI_REQUEST_INTERVAL {
-        tokio::time::sleep(BMCLAPI_REQUEST_INTERVAL - elapsed).await;
+    let mut requested_current = current;
+    let result = loop {
+      let mut request = match range_end {
+        Some(end) => client
+          .get(url.clone())
+          .header(RANGE, format!("bytes={current}-{end}")),
+        None if requested_current > 0 => client
+          .get(url.clone())
+          .header(RANGE, format!("bytes={requested_current}-")),
+        None => client.get(url.clone()),
       }
-      *last_request = Instant::now();
-    }
-
-    let result = match tokio::time::timeout(SOURCE_RESPONSE_TIMEOUT, request.send()).await {
-      Ok(Ok(response)) => {
-        let status = response.status();
-        if !status.is_success() {
-          let kind = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            SourceFailureKind::RateLimited
-          } else {
-            SourceFailureKind::Http
-          };
-          Err((
-            kind,
-            format!("HTTP request rejected for {candidate}: status {status}"),
-          ))
-        } else if range_end.is_some() && status != reqwest::StatusCode::PARTIAL_CONTENT {
-          Err((
-            SourceFailureKind::Range,
-            format!(
-              "{candidate} ignored byte range {current}-{} (status {status})",
-              range_end.unwrap_or_default()
-            ),
-          ))
-        } else {
-          Ok(response)
+      .header("Accept-Encoding", "identity");
+      if authenticated && !CURSEFORGE_API_KEY.is_empty() {
+        request = request.header("x-api-key", CURSEFORGE_API_KEY.as_str());
+      }
+      if candidate.contains("bmclapi") {
+        let mut last_request = request_gate.lock().await;
+        let elapsed = last_request.elapsed();
+        if elapsed < BMCLAPI_REQUEST_INTERVAL {
+          tokio::time::sleep(BMCLAPI_REQUEST_INTERVAL - elapsed).await;
         }
+        *last_request = Instant::now();
       }
-      Ok(Err(error)) => Err((
-        SourceFailureKind::Connection,
-        format!("HTTP request failed for {candidate}: {error}"),
-      )),
-      Err(_) => Err((
-        SourceFailureKind::Timeout,
-        format!("{candidate} did not respond within {SOURCE_RESPONSE_TIMEOUT:?}"),
-      )),
+
+      break match tokio::time::timeout(SOURCE_RESPONSE_TIMEOUT, request.send()).await {
+        Ok(Ok(response)) => {
+          let status = response.status();
+          if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE
+            && requested_current > 0
+            && range_end.is_none()
+          {
+            // Retry this source once without Range. The ordinary 200 response
+            // makes create_resp_stream restart/truncate the partial file. Do
+            // not do this for fixed segments, which must remain bounded ranges.
+            log::warn!(
+              "Resume offset {requested_current} rejected by {candidate}; retrying the full file"
+            );
+            requested_current = 0;
+            continue;
+          }
+          if !status.is_success() {
+            let kind = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+              SourceFailureKind::RateLimited
+            } else {
+              SourceFailureKind::Http
+            };
+            Err((
+              kind,
+              format!("HTTP request rejected for {candidate}: status {status}"),
+            ))
+          } else if range_end.is_some() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+            Err((
+              SourceFailureKind::Range,
+              format!(
+                "{candidate} ignored byte range {current}-{} (status {status})",
+                range_end.unwrap_or_default()
+              ),
+            ))
+          } else {
+            Ok(response)
+          }
+        }
+        Ok(Err(error)) => Err((
+          SourceFailureKind::Connection,
+          format!("HTTP request failed for {candidate}: {error}"),
+        )),
+        Err(_) => Err((
+          SourceFailureKind::Timeout,
+          format!("{candidate} did not respond within {SOURCE_RESPONSE_TIMEOUT:?}"),
+        )),
+      };
     };
     (candidate, started.elapsed(), result)
   }
@@ -1743,6 +1761,10 @@ impl DownloadTask {
                     tracker.record_failure(&active_source, SourceFailureKind::Integrity);
                   }
                   last_error = Some(err);
+                  // An invalid complete file is not a resumable prefix.
+                  // Keeping it would request bytes beyond EOF on the next
+                  // attempt and replace the integrity error with HTTP 416.
+                  tokio::fs::remove_file(&self.dest_path).await?;
                 }
               }
             } else {
@@ -1797,7 +1819,100 @@ impl DownloadTask {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use crate::tasks::download::source::SourceFailureKind;
+  use crate::tasks::download::{DownloadGroupState, DownloadTask, is_range_reset_error};
+  use sjmcl_types::error::BGUMCLError;
+  use std::sync::Arc;
+  use std::sync::atomic::Ordering;
+  use std::time::{Duration, Instant};
+  use tauri_plugin_http::reqwest;
+  use tokio::io::{AsyncReadExt, AsyncWriteExt};
+  use tokio::net::TcpListener;
+  use tokio::sync::Mutex as AsyncMutex;
+
+  async fn mock_candidate_requests(
+    responses: Vec<&'static str>,
+    current: i64,
+    range_end: Option<i64>,
+  ) -> (
+    Result<reqwest::Response, (SourceFailureKind, String)>,
+    Vec<String>,
+  ) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+      let mut requests = Vec::new();
+      for response in responses {
+        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept())
+          .await
+          .unwrap()
+          .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 1024];
+        while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+          let count = stream.read(&mut buffer).await.unwrap();
+          assert!(count > 0);
+          request.extend_from_slice(&buffer[..count]);
+        }
+        requests.push(String::from_utf8(request).unwrap().to_ascii_lowercase());
+        stream.write_all(response.as_bytes()).await.unwrap();
+      }
+      requests
+    });
+    let client = reqwest::Client::builder()
+      .no_proxy()
+      .timeout(Duration::from_secs(2))
+      .build()
+      .unwrap();
+    let (_, _, outcome) = DownloadTask::request_candidate(
+      format!("http://{address}/test.jar"),
+      client,
+      current,
+      range_end,
+      Arc::new(AsyncMutex::new(Instant::now())),
+    )
+    .await;
+    (outcome, server.await.unwrap())
+  }
+
+  const REJECTED_RANGE: &str = "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */5\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+  const FULL_FILE: &str = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello";
+
+  #[tokio::test]
+  async fn rejected_resume_retries_same_candidate_without_range() {
+    let (outcome, requests) =
+      mock_candidate_requests(vec![REJECTED_RANGE, FULL_FILE], 99, None).await;
+    let response = outcome.unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.bytes().await.unwrap().as_ref(), b"hello");
+    assert!(requests[0].contains("\r\nrange: bytes=99-\r\n"));
+    assert!(!requests[1].contains("\r\nrange:"));
+  }
+
+  #[tokio::test]
+  async fn rejected_full_retry_is_bounded_and_propagates_failure() {
+    let (outcome, requests) =
+      mock_candidate_requests(vec![REJECTED_RANGE, REJECTED_RANGE], 99, None).await;
+    assert!(outcome.unwrap_err().1.contains("416"));
+    assert_eq!(requests.len(), 2);
+  }
+
+  #[tokio::test]
+  async fn fixed_segment_does_not_accept_an_unbounded_full_download() {
+    let (outcome, requests) = mock_candidate_requests(vec![REJECTED_RANGE], 99, Some(120)).await;
+    assert!(outcome.unwrap_err().1.contains("416"));
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].contains("\r\nrange: bytes=99-120\r\n"));
+  }
+
+  #[tokio::test]
+  async fn valid_partial_response_keeps_resume_range() {
+    let partial = "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 2-4/5\r\nContent-Length: 3\r\nConnection: close\r\n\r\nllo";
+    let (outcome, requests) = mock_candidate_requests(vec![partial], 2, None).await;
+    assert_eq!(outcome.unwrap().bytes().await.unwrap().as_ref(), b"llo");
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].contains("\r\nrange: bytes=2-\r\n"));
+  }
 
   #[test]
   fn v2_segment_count_is_size_bounded() {
