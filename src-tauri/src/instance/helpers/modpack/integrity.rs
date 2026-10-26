@@ -394,7 +394,7 @@ pub async fn scan_modpack_integrity(
           path: format!("CurseForge {}/{}", entry.project_id, entry.file_id),
           status: IntegrityStatus::Unverified,
           source: "remote".into(),
-          detail: Some(error.to_string()),
+          detail: Some(error.0),
         }),
       }
     }
@@ -407,7 +407,7 @@ pub async fn scan_modpack_integrity(
       .map(|expected| {
         let (status, detail) = match classify(&scan_root, expected) {
           Ok(status) => (status, None),
-          Err(error) => (IntegrityStatus::Unverified, Some(error.to_string())),
+          Err(error) => (IntegrityStatus::Unverified, Some(error.0)),
         };
         IntegrityEntry {
           id: expected.path.clone(),
