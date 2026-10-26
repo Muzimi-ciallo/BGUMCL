@@ -24,10 +24,10 @@ BGUMCL 是一款基于 [SJMCL](https://github.com/UNIkeEN/SJMCL) 二次开发的
 前往 [GitHub Releases](https://github.com/Muzimi-ciallo/BGUMCL/releases/latest)，下载名称类似下面格式的文件：
 
 ```text
-BGUMCL_1.4.9_windows_x86_64_portable.exe
+BGUMCL_1.4.10_windows_x86_64_portable.exe
 ```
 
-当前正式版为 **1.4.9**。这是完整便携版，无需安装。
+当前正式版为 **1.4.10**。这是完整便携版，无需安装。
 
 1. 新建一个可读写的独立目录，例如 `D:\Games\BGUMCL`。
 2. 将下载的便携版放入该目录，不要直接在压缩包、临时目录或系统保护目录中运行。
@@ -58,6 +58,7 @@ BGUMCL_1.4.9_windows_x86_64_portable.exe
 - **实例集中管理**：管理多个游戏目录和实例，以及对应的模组、资源包、光影包、存档、截图与启动设置。
 - **资源发现与安装**：浏览并下载 CurseForge、Modrinth 上的模组、整合包及其他游戏资源。
 - **整合包导入与导出**：支持 Modrinth `.mrpack`、CurseForge、MultiMC 等格式，并提供湾大服务器整合包一键下载入口。
+- **验证包完整性**：用原 ZIP / MRPACK 检查缺失或损坏的 MOD，勾选补齐，并直接打开下载缓存目录。
 - **加载器管理**：安装或更新 Fabric、Forge、NeoForge、Quilt 和 OptiFine。
 - **多账户支持**：支持 Microsoft、离线账户及兼容 Yggdrasil 的第三方认证服务。
 - **启动器更新**：从正式发布源检查并下载新版，网络异常时自动尝试备用地址。
@@ -91,6 +92,12 @@ BGUMCL_1.4.9_windows_x86_64_portable.exe
 2. 暂时关闭可能不稳定的代理或 VPN，再进行一次对照测试。
 3. 确认系统时间正确，并检查防火墙或安全软件是否拦截 CurseForge、Modrinth 或 Minecraft CDN。
 4. 若同一文件持续失败，请附上日志提交 Issue，不要只提供“下载失败”的截图。
+
+### 如何用原整合包补齐缺失的 MOD？
+
+打开实例的“概览”，在“验证包完整性”卡片中点击“选择原 ZIP 验证”，选择该实例对应的原 ZIP 或 MRPACK 后开始扫描。确认缺失或损坏的文件，点击“补齐所选”；远程文件会进入正常下载列表，ZIP 内置文件会从原包恢复。
+
+请等待其他下载结束后再补齐。扫描会保留额外添加及已禁用的 MOD，补齐只处理勾选文件，不覆盖配置和存档。无法查询元数据的文件会标记为“无法验证”，可在网络恢复后重新扫描。卡片上的“打开下载缓存”会用系统文件管理器打开当前配置的缓存目录。
 
 ### 启动器日志在哪里？
 
